@@ -1,0 +1,1369 @@
+<html>
+	<head>
+		<title>4 in a row - Francesco Andreussi 118708</title>
+		<style>
+		body {
+			font-family: Monospace;
+			background-color: #f0f0f0;
+			margin: 0px;
+			overflow: hidden;
+		}
+		canvas { 
+			width: 100%; 
+			height: 100%;
+		}
+
+		#controls { position: absolute;
+				font-family: monospace;
+				text-align: center;
+				width: 100%;
+			}
+		</style>
+		<script src="lib/three.min.js"></script>
+		<script src="lib/stats.min.js"></script>
+		<script src="lib/OBJLoader.js"></script>
+		<script src="lib/OrbitControls.js"></script>
+		<script src="lib/Detector.js"></script>
+		<script src="lib/dat.gui.min.js"></script>
+		<script src="lib/tween.js"></script>
+		<script src="lib/EffectComposer.js"></script>
+		<script src="lib/CopyShader.js"></script>
+		<script src="lib/ShaderPass.js"></script>
+		<script src="lib/RenderPass.js"></script>
+		<script src="lib/MaskPass.js"></script>
+	</head>
+	<body>
+		<div id="controls">
+			<label for="negative">Are you negative? (negative postprocessing):</label><input id="negative" type="checkbox" onchange="updateOptions()"/><br />
+		</div>
+		
+		<script type="text/x-glsl" id="vertex">
+		varying vec3 tNormal;
+		varying vec3 lVector[3];
+		varying vec3 pointPosition;
+		varying vec4 worldPosition;
+		varying vec2 vUv;
+
+		uniform vec3 pointLightPosition[3];
+		
+		void main() {
+			tNormal = normalMatrix * normal;
+			worldPosition = modelMatrix * vec4( position, 1.0 );
+			pointPosition = ( viewMatrix * worldPosition).xyz;
+			gl_Position = projectionMatrix * vec4( pointPosition, 1.0 );
+			vUv = uv;
+			vec4 lPosition[3];
+			for( int i = 0; i < 3; i++){
+				lPosition[i] = viewMatrix * vec4( pointLightPosition[i], 1.0 );
+				lVector[i] = lPosition[i].xyz - pointPosition;
+			}
+		}
+		</script>
+		<script type="text/x-glsl" id="fragment">
+			varying vec3 tNormal;
+			varying vec3 lVector[3];
+			varying vec3 pointPosition;
+			varying vec4 worldPosition;
+			varying vec2 vUv;
+
+			uniform vec3 pointLightPosition[3];
+			uniform vec3 lightPower[3];
+			uniform vec3 c_spec; // surface specular color: equal to F(0)
+			uniform vec3 rho; // surface diffuse color
+			uniform float alpha; // material roughness (increase for rougher surface)
+			uniform float s; // ratio of diffuse lighting
+			uniform vec3 ambientLight;
+
+			#define PI 3.14159265
+
+			// compute the geometry term
+			float G(float LdotH)
+			{
+				return 1.0/pow(LdotH,2.0);
+			}
+
+			// compute Fresnel reflection term with Schlick approximation
+			vec3 F(float LdotH) {
+				return c_spec + (vec3(1.0) - c_spec)*pow(1.0-LdotH, 5.0);
+			}
+
+			// compute the normal distribution function, based on Trowbridge-Reitz
+			float D(float NdotH){
+				float A = pow(alpha,2.0);
+				float B = PI * pow(pow(NdotH,2.0)*(A-1.0) + 1.0, 2.0);
+				return A/B;
+			}
+
+			void main()
+			{
+				vec3 shadedColor = vec3( 0.0, 0.0, 0.0 );
+				vec3  n      		 	= normalize( tNormal );  
+				vec3  v         		= normalize( -pointPosition );
+				
+				if( abs( worldPosition.x ) >= 1390.0 || abs( worldPosition.z ) >= 1190.0 || worldPosition.y >= 870.0  ){
+					vec3 beta = lightPower[2];
+					vec3 l = normalize( lVector[2] );
+					vec3 h = normalize( v+l );
+					float  NdotL 			= max(0.000001, dot( n, l ));
+
+					//SPECULAR TERM 
+					float  NdotH    		= max(0.000001, dot( n, h ));  
+					float  VdotH     		= max(0.000001, dot( v, h ));  
+					float  NdotV 			= max(0.000001, dot( n, v ));  
+					//specular BRDF
+					vec3 spec_term = F(VdotH) * G(VdotH) * D(NdotH) / 4.0;
+
+					vec3 diff_term = rho;
+
+					shadedColor += vec3( beta * NdotL * ( s * diff_term + (1.0-s) * spec_term ) );
+				}else{
+					for( int i = 0; i < 2; i++ ){
+						//GENERAL OPERATIONS
+						vec3 beta = lightPower[i] / ( 4.0  * PI * pow( length( lVector[i] ),2.0) );
+						vec3 l = normalize( lVector[i] );
+						vec3 h = normalize( v+l );
+						float  NdotL 			= max(0.000001, dot( n, l ));
+
+						//SPECULAR TERM 
+						float  NdotH    		= max(0.000001, dot( n, h ));  
+						float  VdotH     		= max(0.000001, dot( v, h ));  
+						float  NdotV 			= max(0.000001, dot( n, v ));  
+						//specular BRDF
+						vec3 spec_term = F(VdotH) * G(VdotH) * D(NdotH) / 4.0;
+
+						vec3 diff_term = rho;
+
+						shadedColor += vec3( beta * NdotL * ( s * diff_term + (1.0-s) * spec_term ) );
+					}
+				}
+				gl_FragColor = vec4( shadedColor + ambientLight , 1.0 );
+			}
+		</script>
+		<script type="text/x-glsl" id="texture_fragment">
+			varying vec3 tNormal;
+			varying vec3 lVector[3];
+			varying vec3 pointPosition;
+			varying vec4 worldPosition;
+			varying vec2 vUv;
+
+			uniform vec3 pointLightPosition[3];
+			uniform vec3 lightPower[3];
+			uniform vec3 c_spec; // surface specular color: equal to F(0)
+			uniform float alpha; // material roughness (increase for rougher surface)
+			uniform vec3 ambientLight;
+			uniform sampler2D texture; // surface diffuse color
+			uniform sampler2D normalMap;
+			uniform vec2 normalScale;
+			uniform float s; // ratio of diffuse lighting
+			uniform float repetitions;
+			//THREE.UniformsLib["shadowmap"];
+
+			#define PI 3.14159265
+
+			#extension GL_OES_standard_derivatives : enable
+
+			vec3 perturbNormal2Arb( vec3 eye_pos, vec3 surf_norm ) {
+
+				vec3 q0 = dFdx( eye_pos.xyz );
+				vec3 q1 = dFdy( eye_pos.xyz );
+				vec2 st0 = dFdx( vUv.st );
+				vec2 st1 = dFdy( vUv.st );
+
+				vec3 S = normalize(  q0 * st1.t - q1 * st0.t );
+				vec3 T = normalize( -q0 * st1.s + q1 * st0.s );
+				vec3 N =  surf_norm ;
+
+				vec3 mapN = texture2D( normalMap, vUv ).xyz * 2.0 - 1.0;
+				mapN.xy = normalScale * mapN.xy;
+				mat3 tsn = mat3( S, T, N );
+				return normalize( tsn * mapN );
+
+			}
+
+			float G(float LdotH)
+			{
+				return 1.0/pow(LdotH,2.0);
+			}
+
+			// compute Fresnel reflection term with Schlick approximation
+			vec3 F(float LdotH) {
+				return c_spec + (vec3(1.0) - c_spec)*pow(1.0-LdotH, 5.0);
+			}
+
+			// compute the normal distribution function, based on Trowbridge-Reitz
+			float D(float NdotH){
+				float A = pow(alpha,2.0);
+				float B = PI * pow(pow(NdotH,2.0)*(A-1.0) + 1.0, 2.0);
+				return A/B;
+			}
+
+			void main()
+			{
+				vec3 shadedColor = vec3( 0.0, 0.0, 0.0 );
+				vec3  n      		 	= perturbNormal2Arb( pointPosition, normalize( tNormal ) );  
+				vec3  v         		= normalize( -pointPosition );
+				if( abs( worldPosition.x ) >= 1390.0 || abs( worldPosition.z ) >= 1190.0 || worldPosition.y >= 870.0  ){
+					vec3 beta = lightPower[2];
+					vec3 l = normalize( lVector[2] );
+					vec3 h = normalize( v+l );
+					float  NdotL 			= max(0.000001, dot( n, l ));
+
+					//SPECULAR TERM 
+					float  NdotH    		= max(0.000001, dot( n, h ));  
+					float  VdotH     		= max(0.000001, dot( v, h ));  
+					float  NdotV 			= max(0.000001, dot( n, v ));  
+					//specular BRDF
+					vec3 spec_term = F(VdotH) * G(VdotH) * D(NdotH) / 4.0;
+
+					//DIFFUSE TERM
+					vec3 diff_term = vec3( texture2D( texture, mod(vUv * repetitions, 1.0) ) )/PI;
+
+					shadedColor += vec3( beta * NdotL * ( s * diff_term + (1.0-s) * spec_term ) );
+				}else{
+					for( int i = 0; i < 2; i++ ){
+						//GENERAL OPERATIONS
+						vec3 beta = lightPower[i] / ( 4.0  * PI * pow( length( lVector[i] ),2.0) );
+						vec3 l = normalize( lVector[i] );
+						vec3 h = normalize( v+l );
+						float NdotL = max(0.000001, dot( n, l ));
+
+						//SPECULAR TERM 
+						float  NdotH    		= max(0.000001, dot( n, h ));  
+						float  VdotH     		= max(0.000001, dot( v, h ));  
+						float  NdotV 			= max(0.000001, dot( n, v ));
+						//specular BRDF
+						vec3 spec_term = F(VdotH) * G(VdotH) * D(NdotH) / 4.0;
+
+						//DIFFUSE TERM
+						vec3 diff_term = vec3( texture2D( texture, mod(vUv * repetitions, 1.0) ) )/PI;
+
+						shadedColor += vec3( beta * NdotL * ( s * diff_term + (1.0-s) * spec_term ) );
+					}
+				}
+				gl_FragColor = vec4( shadedColor + ambientLight, 1.0 );
+			}
+		</script>
+
+		<script> 
+			//creo gli elementi della base della scena
+			var scene = new THREE.Scene();
+			var camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 0.1, 1000000 );
+				camera.position.set( 0, 0, 0 );
+				scene.add( camera );
+			var controls = new THREE.OrbitControls( camera );
+			var stats = new Stats();
+				stats.domElement.style.position = 'absolute';
+				stats.domElement.style.top = '0px';
+				document.body.appendChild( stats.domElement );
+			var renderer = new THREE.WebGLRenderer();
+				renderer.setSize( window.innerWidth, window.innerHeight );
+				renderer.setClearColor( 0xc0ffff );
+				renderer.shadowMapEnabled = true;
+				document.body.appendChild( renderer.domElement );
+			var instructions = document.createElement( 'div' );
+				instructions.style.position = 'absolute';
+				instructions.style.top = '15px';
+				instructions.style.width = '100%';
+				instructions.style.textAlign = 'center';
+				document.body.appendChild( instructions );
+			var pNum = 5000;
+			var particles = new THREE.Geometry();
+			var pointsSystem;
+			var all = new THREE.Object3D();	//oggetto dove verranno aggiunti tutti gli oggetti della scena
+			var tokens = new THREE.Object3D();
+			scene.add( all );
+			
+			//...e LUCE fu! (aggiunte le luci)
+			var Slight1 = new THREE.SpotLight( 0xfffff0, 5, 800, Math.PI/2, 0.5, 2 );
+			Slight1.position.set( 0, 850, 0 );
+			scene.add( Slight1 );
+
+			var Slight2 = new THREE.SpotLight( 0xfffff0, 5, 400, Math.PI/2, 0.7, 2 );
+			Slight2.position.set( -1250, 550, -1000 );
+			scene.add( Slight2 );
+
+			var Dlight = new THREE.DirectionalLight( 0xffffff, 1 );
+			Dlight.position.set( 20000, 40000, 20000 );
+			Dlight.castShadow = true;
+			scene.add( Dlight );
+
+			//Definisco le uniform per i vari materiali
+			var wallsUniforms = {
+				rho:				{ type: "v3", value: new THREE.Vector3() },
+				c_spec: 			{ type: "v3", value: new THREE.Vector3() },
+				pointLightPosition:	{ type: "v3v", value: [ new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3() ] },
+				lightPower:			{ type: "v3v", value: [ new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3() ] },
+				s: 					{ type: "f", value: 1.0 },
+				alpha: 				{ type: "f", value: 1.0 },
+				ambientLight: 		{ type: "v3", value: new THREE.Vector3( 0.4, 0.4, 0.4 ) }
+			};
+
+			var lamp1Uniforms = {
+				rho:				{ type: "v3", value: new THREE.Vector3() },
+				c_spec: 			{ type: "v3", value: new THREE.Vector3() },
+				pointLightPosition:	{ type: "v3v", value: [ new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3() ] },
+				lightPower:			{ type: "v3v", value: [ new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3() ] },
+				s: 					{ type: "f", value: 0.0 },
+				alpha: 				{ type: "f", value: 500.0 },
+				ambientLight: 		{ type: "v3", value: new THREE.Vector3( 0.95, 0.95, 0.75 ) }
+			};
+
+			var lamp2Uniforms = {
+				rho:				{ type: "v3", value: new THREE.Vector3() },
+				c_spec: 			{ type: "v3", value: new THREE.Vector3() },
+				pointLightPosition:	{ type: "v3v", value: [ new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3() ] },
+				lightPower:			{ type: "v3v", value: [ new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3() ] },
+				s: 					{ type: "f", value: 0.0 },
+				alpha: 				{ type: "f", value: 500.0 },
+				ambientLight: 		{ type: "v3", value: new THREE.Vector3( 0.95, 0.5, 0.3 ) }
+			};
+
+			var glossUniforms = {
+				rho:				{ type: "v3", value: new THREE.Vector3() },
+				c_spec: 			{ type: "v3", value: new THREE.Vector3() },
+				pointLightPosition:	{ type: "v3v", value: [ new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3() ] },
+				lightPower:			{ type: "v3v", value: [ new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3() ] },
+				s: 					{ type: "f", value: 0.15 },
+				alpha: 				{ type: "f", value: 0.1 },
+				ambientLight: 		{ type: "v3", value: new THREE.Vector3() }
+			};
+
+			var brassUniforms = {
+				rho:				{ type: "v3", value: new THREE.Vector3() },
+				c_spec: 			{ type: "v3", value: new THREE.Vector3() },
+				pointLightPosition:	{ type: "v3v", value: [ new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3() ] },
+				lightPower:			{ type: "v3v", value: [ new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3() ] },
+				s: 					{ type: "f", value: 0.0 },
+				alpha: 				{ type: "f", value: 0.2 },
+				ambientLight: 		{ type: "v3", value: new THREE.Vector3( 0.15, 0.125, 0.05 ) }
+			};
+
+			var lampBaseUniforms = {
+				rho:				{ type: "v3", value: new THREE.Vector3() },
+				c_spec: 			{ type: "v3", value: new THREE.Vector3() },
+				pointLightPosition:	{ type: "v3v", value: [ new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3() ] },
+				lightPower:			{ type: "v3v", value: [ new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3() ] },
+				s: 					{ type: "f", value: 0.25 },
+				alpha: 				{ type: "f", value: 0.3 },
+				ambientLight: 		{ type: "v3", value: new THREE.Vector3() }
+			};
+
+			var wood1Uniforms = {
+				texture:			{ type: "t", value: THREE.ImageUtils.loadTexture( "textures/wood1/wood1_c.png" ) },
+				normalMap:			{ type: "t", value: THREE.ImageUtils.loadTexture( "textures/wood1/wood1_n.png" ) },
+				normalScale: {type: "v2", value: new THREE.Vector2(1,1)},
+				c_spec: 			{ type: "v3", value: new THREE.Vector3() },
+				pointLightPosition:	{ type: "v3v", value: [ new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3() ] },
+				lightPower:			{ type: "v3v", value: [ new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3() ] },
+				s: 					{ type: "f", value: 0.7 },
+				alpha: 				{ type: "f", value: 0.1 },
+				repetitions: 		{ type: "f", value: 1.0 },
+				ambientLight: 		{ type: "v3", value: new THREE.Vector3() }
+			};
+
+			var wood2Uniforms = {
+				texture:			{ type: "t", value: THREE.ImageUtils.loadTexture( "textures/wood2/wood2_c.png" ) },
+				normalMap:			{ type: "t", value: THREE.ImageUtils.loadTexture( "textures/mondrian/mondrian_n.png" ) },
+				c_spec: 			{ type: "v3", value: new THREE.Vector3() },
+				pointLightPosition:	{ type: "v3v", value: [ new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3() ] },
+				lightPower:			{ type: "v3v", value: [ new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3() ] },
+				s: 					{ type: "f", value: 0.5 },
+				alpha: 				{ type: "f", value: 0.1 },
+				repetitions: 		{ type: "f", value: 1.0 },
+				ambientLight: 		{ type: "v3", value: new THREE.Vector3() }
+			};
+
+			var wood3Uniforms = {
+				texture:			{ type: "t", value: THREE.ImageUtils.loadTexture( "textures/wood3/wood3_c.png" ) },
+				normalMap:			{ type: "t", value: THREE.ImageUtils.loadTexture( "textures/mondrian/mondrian_n.png" ) },
+				c_spec: 			{ type: "v3", value: new THREE.Vector3() },
+				pointLightPosition:	{ type: "v3v", value: [ new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3() ] },
+				lightPower:			{ type: "v3v", value: [ new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3() ] },
+				s: 					{ type: "f", value: 0.5 },
+				alpha: 				{ type: "f", value: 0.1 },
+				repetitions: 		{ type: "f", value: 1.0 },
+				ambientLight: 		{ type: "v3", value: new THREE.Vector3(0.1, 0.05, 0.0) }
+			};
+
+			var rooftilesUniforms = {
+				texture:			{ type: "t", value: THREE.ImageUtils.loadTexture( "textures/roof/roof_c.png" ) },
+				normalMap:			{ type: "t", value: THREE.ImageUtils.loadTexture( "textures/mondrian/mondrian_n.png" )  },
+				c_spec: 			{ type: "v3", value: new THREE.Vector3() },
+				pointLightPosition:	{ type: "v3v", value: [ new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3() ] },
+				lightPower:			{ type: "v3v", value: [ new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3() ] },
+				s: 					{ type: "f", value: 1.0 },
+				alpha: 				{ type: "f", value: 0.5 },
+				repetitions: 		{ type: "f", value: 4.0 },
+				ambientLight: 		{ type: "v3", value: new THREE.Vector3( 0.1, 0.1, 0.1 ) }
+			};
+
+			var pictureUniforms = {
+				texture:			{ type: "t", value: THREE.ImageUtils.loadTexture( "textures/mondrian/mondrian_c.png" ) },
+				normalMap:			{ type: "t", value: THREE.ImageUtils.loadTexture( "textures/mondrian/mondrian_n.png" ) },
+				c_spec: 			{ type: "v3", value: new THREE.Vector3() },
+				pointLightPosition:	{ type: "v3v", value: [ new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3() ] },
+				lightPower:			{ type: "v3v", value: [ new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3() ] },
+				s: 					{ type: "f", value: 1.0 },
+				alpha: 				{ type: "f", value: 0.5 },
+				repetitions: 		{ type: "f", value: 1.0 },
+				ambientLight: 		{ type: "v3", value: new THREE.Vector3() }
+			};
+
+			var grassUniforms = {
+				texture:			{ type: "t", value: THREE.ImageUtils.loadTexture( "textures/grass/grass.jpg" ) },
+				c_spec: 			{ type: "v3", value: new THREE.Vector3() },
+				pointLightPosition:	{ type: "v3v", value: [ new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3() ] },
+				lightPower:			{ type: "v3v", value: [ new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3() ] },
+				s: 					{ type: "f", value: 1.0 },
+				alpha: 				{ type: "f", value: 1.0 },
+				repetitions: 		{ type: "f", value: 4.0 },
+				ambientLight: 		{ type: "v3", value: new THREE.Vector3() }
+			};
+
+			var connect4Uniforms = {
+				rho:				{ type: "v3", value: new THREE.Vector3() },
+				c_spec: 			{ type: "v3", value: new THREE.Vector3() },
+				pointLightPosition:	{ type: "v3v", value: [ new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3() ] },
+				lightPower:			{ type: "v3v", value: [ new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3() ] },
+				s: 					{ type: "f", value: 0.5 },
+				alpha: 				{ type: "f", value: 0.2 },
+				ambientLight: 		{ type: "v3", value: new THREE.Vector3(0.0, 0.0, 0.3) }
+			};
+
+			var redUniforms = {
+				rho:				{ type: "v3", value: new THREE.Vector3() },
+				c_spec: 			{ type: "v3", value: new THREE.Vector3() },
+				pointLightPosition:	{ type: "v3v", value: [ new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3() ] },
+				lightPower:			{ type: "v3v", value: [ new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3() ] },
+				s: 					{ type: "f", value: 0.5 },
+				alpha: 				{ type: "f", value: 0.2 },
+				ambientLight: 		{ type: "v3", value: new THREE.Vector3(0.3, 0.0, 0.0) }
+			};
+
+			var yellowUniforms = {
+				rho:				{ type: "v3", value: new THREE.Vector3() },
+				c_spec: 			{ type: "v3", value: new THREE.Vector3() },
+				pointLightPosition:	{ type: "v3v", value: [ new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3() ] },
+				lightPower:			{ type: "v3v", value: [ new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3() ] },
+				s: 					{ type: "f", value: 0.5 },
+				alpha: 				{ type: "f", value: 0.2 },
+				ambientLight: 		{ type: "v3", value: new THREE.Vector3(0.3, 0.3, 0.0) }
+			};
+
+			//gli shader
+			var vs = document.getElementById("vertex").textContent;
+			var fs = document.getElementById("fragment").textContent;
+			var Tfs = document.getElementById("texture_fragment").textContent;
+
+			//definisco alcune uniform per i materiali
+			wallsUniforms.rho.value = (new THREE.Vector3( 1.0, 1.0, 1.0 )).divideScalar(Math.PI);
+			wallsUniforms.pointLightPosition.value[0] = Slight1.position;
+			wallsUniforms.lightPower.value[0] = new THREE.Vector3( 80000000.0, 80000000.0, 80000000.0 );
+			wallsUniforms.pointLightPosition.value[1] = Slight2.position;
+			wallsUniforms.lightPower.value[1] = new THREE.Vector3( 5000000.0, 1250000.0, 1250000.0 );
+			wallsUniforms.pointLightPosition.value[2] = Dlight.position;
+			wallsUniforms.lightPower.value[2] = new THREE.Vector3( 3.0, 3.0, 3.0 );
+
+			lamp1Uniforms.rho.value = (new THREE.Vector3( 1.0, 1.0, 0.9 )).divideScalar(Math.PI);
+			lamp1Uniforms.pointLightPosition.value = wallsUniforms.pointLightPosition.value;
+			lamp1Uniforms.lightPower.value = wallsUniforms.lightPower.value;
+
+			lamp2Uniforms.rho.value = (new THREE.Vector3( 1.0, 0.6, 0.2 )).divideScalar(Math.PI);
+			lamp2Uniforms.pointLightPosition.value = wallsUniforms.pointLightPosition.value;
+			lamp2Uniforms.lightPower.value = wallsUniforms.lightPower.value;
+
+			wood1Uniforms.pointLightPosition.value = wallsUniforms.pointLightPosition.value;
+			wood1Uniforms.lightPower.value = wallsUniforms.lightPower.value;
+			wood1Uniforms.c_spec.value = new THREE.Vector3( 0.05, 0.05, 0.05);
+
+			wood2Uniforms.pointLightPosition.value = wood1Uniforms.pointLightPosition.value;
+			wood2Uniforms.lightPower.value = wood1Uniforms.lightPower.value;
+			wood2Uniforms.c_spec.value = wood1Uniforms.c_spec.value;
+
+			wood3Uniforms.pointLightPosition.value = wood1Uniforms.pointLightPosition.value;
+			wood3Uniforms.lightPower.value = wood1Uniforms.lightPower.value;
+			wood3Uniforms.c_spec.value = wood1Uniforms.c_spec.value;
+
+			rooftilesUniforms.pointLightPosition.value = wood1Uniforms.pointLightPosition.value;
+			rooftilesUniforms.lightPower.value = wood1Uniforms.lightPower.value;
+			rooftilesUniforms.c_spec.value = new THREE.Vector3( 0.0, 0.0, 0.0);
+
+			pictureUniforms.pointLightPosition.value = wood1Uniforms.pointLightPosition.value;
+			pictureUniforms.lightPower.value = wood1Uniforms.lightPower.value;
+			pictureUniforms.c_spec.value = new THREE.Vector3( 0.0, 0.0, 0.0);
+
+			grassUniforms.pointLightPosition.value = wood1Uniforms.pointLightPosition.value;
+			grassUniforms.lightPower.value = wood1Uniforms.lightPower.value;
+			grassUniforms.c_spec.value = new THREE.Vector3( 0.0, 0.0, 0.0);
+
+			glossUniforms.pointLightPosition.value = wood1Uniforms.pointLightPosition.value;
+			glossUniforms.lightPower.value = wood1Uniforms.lightPower.value;
+			glossUniforms.rho.value = ( new THREE.Vector3( 0.2, 0.2, 0.2 ) ).divideScalar(Math.PI);
+			glossUniforms.c_spec.value = new THREE.Vector3( 0.05, 0.05, 0.05);
+
+			brassUniforms.pointLightPosition.value = wood1Uniforms.pointLightPosition.value;
+			brassUniforms.lightPower.value = wood1Uniforms.lightPower.value;
+			brassUniforms.rho.value = ( new THREE.Vector3( 0.2, 0.2, 0.2 ) ).divideScalar(Math.PI);
+			brassUniforms.c_spec.value = new THREE.Vector3( 0.95, 0.75, 0.25);
+
+			lampBaseUniforms.pointLightPosition.value = wood1Uniforms.pointLightPosition.value;
+			lampBaseUniforms.lightPower.value = wood1Uniforms.lightPower.value;
+			lampBaseUniforms.rho.value = ( new THREE.Vector3( 0.1, 0.1, 0.1 ) ).divideScalar(Math.PI);
+			lampBaseUniforms.c_spec.value = new THREE.Vector3( 0.8, 0.8, 0.8);
+
+			connect4Uniforms.pointLightPosition.value = wood1Uniforms.pointLightPosition.value;
+			connect4Uniforms.lightPower.value = wood1Uniforms.lightPower.value;
+			connect4Uniforms.rho.value = ( new THREE.Vector3( 0.1, 0.1, 0.95 ) ).divideScalar(Math.PI);
+			connect4Uniforms.c_spec.value = new THREE.Vector3( 0.05, 0.05, 0.05);
+
+			redUniforms.pointLightPosition.value = wood1Uniforms.pointLightPosition.value;
+			redUniforms.lightPower.value = wood1Uniforms.lightPower.value;
+			redUniforms.rho.value = ( new THREE.Vector3( 0.9, 0.0, 0.0 ) ).divideScalar(Math.PI);
+			redUniforms.c_spec.value = new THREE.Vector3( 0.05, 0.05, 0.05);
+
+			yellowUniforms.pointLightPosition.value = wood1Uniforms.pointLightPosition.value;
+			yellowUniforms.lightPower.value = wood1Uniforms.lightPower.value;
+			yellowUniforms.rho.value = ( new THREE.Vector3( 0.9, 0.9, 0.0 ) ).divideScalar(Math.PI);
+			yellowUniforms.c_spec.value = new THREE.Vector3( 0.05, 0.05, 0.05);
+
+			//definisco i materiali
+			wallsMaterial = new THREE.ShaderMaterial( { uniforms: wallsUniforms, vertexShader: vs, fragmentShader: fs } );
+			lamp1Material = new THREE.ShaderMaterial( { uniforms: lamp1Uniforms, vertexShader: vs, fragmentShader: fs } );
+			lamp2Material = new THREE.ShaderMaterial( { uniforms: lamp2Uniforms, vertexShader: vs, fragmentShader: fs } );
+			glossMaterial = new THREE.ShaderMaterial( { uniforms: glossUniforms, vertexShader: vs, fragmentShader: fs } );
+			wood1Material = new THREE.ShaderMaterial( { uniforms: wood1Uniforms, vertexShader: vs, fragmentShader: Tfs } );
+			wood2Material = new THREE.ShaderMaterial( { uniforms: wood2Uniforms, vertexShader: vs, fragmentShader: Tfs } );
+			wood3Material = new THREE.ShaderMaterial( { uniforms: wood3Uniforms, vertexShader: vs, fragmentShader: Tfs } );
+			rooftilesMaterial = new THREE.ShaderMaterial( { uniforms: rooftilesUniforms, vertexShader: vs, fragmentShader: Tfs } );
+			pictureMaterial = new THREE.ShaderMaterial( { uniforms: pictureUniforms, vertexShader: vs, fragmentShader: Tfs } );
+			grassMaterial = new THREE.ShaderMaterial( { uniforms: grassUniforms, vertexShader: vs, fragmentShader: Tfs } );
+			brassMaterial = new THREE.ShaderMaterial( { uniforms: brassUniforms, vertexShader: vs, fragmentShader: fs } );
+			lampBaseMaterial = new THREE.ShaderMaterial( { uniforms: lampBaseUniforms, vertexShader: vs, fragmentShader: fs } );
+			connect4Material = new THREE.ShaderMaterial( { uniforms: connect4Uniforms, vertexShader: vs, fragmentShader: fs } );
+			redMaterial = new THREE.ShaderMaterial( { uniforms: redUniforms, vertexShader: vs, fragmentShader: fs } );
+			yellowMaterial = new THREE.ShaderMaterial( { uniforms: yellowUniforms, vertexShader: vs, fragmentShader: fs } );
+
+			//postprocessing negativo
+			negShader = {
+							uniforms: { "tDiffuse": { type: "t", value: null },
+										"width": { type: "f", value: 0.0 },
+										"height": { type: "f", value: 0.0 },
+									},
+							vertexShader: [	
+										"varying vec2 vUv;",
+										"void main() {",
+											"vUv = uv;",
+											"gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );",
+										"}"
+							].join("\n"),
+
+							fragmentShader: [
+										"uniform sampler2D tDiffuse;",
+										"varying vec2 vUv;",
+										"void main() {",
+											"vec3 original_color = texture2D(tDiffuse, vUv).rgb;",
+											"vec3 new_color = vec3( 1.0 - original_color );", 
+											"gl_FragColor = vec4( new_color, 1.0);",
+										"}"
+							].join("\n")
+						};
+
+			var negEffect, composer, renderer;
+			function updateOptions() {
+				var neg = document.getElementById('negative');
+				negEffect.enabled = neg.checked;
+			}
+
+			//creo la GUI
+			window.onload = function(){
+				var gui = new dat.GUI();
+				var game = new commands();
+				gui.add( game, 'startNewGame' );
+				gui.add( game, 'play' );
+				gui.add( game, 'pause' );
+			}
+			//creo le funzioni della dat.GUI
+			var commands = function(){
+				this.startNewGame = function(){
+					player = 1;
+					token = 0;
+					resetTokens();
+					resetConnect4();
+					resetSupport();
+					scene.remove( winningText );
+					scene.remove( pointsSystem );
+					changeCamera( 0 );
+					document.removeEventListener("keydown", onDocumentKeyDown, false);
+				};
+				this.play = function(){
+					if( ! isTheWinner() ){
+						changeCamera( player );
+						document.addEventListener("keydown", onDocumentKeyDown, false);
+					}
+				};
+				this.pause = function(){
+					changeCamera( 0 );
+					document.removeEventListener("keydown", onDocumentKeyDown, false);
+				};
+
+			}
+			
+			var player;						//variabile globale per gestire il cambio turno
+			var token;						//variabile globale per gestire il consumo di tessere
+			var tokenPos;					//variabile globale per gestire lo spostamento delle tessere tra le colonne per evitare che escano dai limiti
+			var pov;						//variabile globale per gestire il punto di vista dell'utente
+			var position;					//variabile globale per gestire la selezione delle colonne
+			init();							//inizializzo le variabili e la scena
+			function init(){
+				player = 1;
+				token = 0;
+				loadTokens();
+				instructions.innerHTML = '<div>Press LEFT/RIGHT to choose column and DOWN/ENTER to select it...Enjoy!</div>';
+				// postprocessing
+
+				composer = new THREE.EffectComposer( renderer );
+				composer.addPass( new THREE.RenderPass( scene, camera ) );
+
+				negEffect = new THREE.ShaderPass( negShader );
+				negEffect.uniforms.width.value = window.innerWidth;
+				negEffect.uniforms.height.value = window.innerHeight;
+				composer.addPass( negEffect );
+				
+				var effect = new THREE.ShaderPass( THREE.CopyShader);
+				effect.renderToScreen = true;
+				composer.addPass( effect );
+
+				updateOptions();
+
+				window.addEventListener( 'resize', onWindowResize, false );
+				changeCamera( 0 );
+			}
+
+			function onWindowResize(){
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+				renderer.setSize( window.innerWidth, window.innerHeight );
+			}
+
+			//Skybox
+			var path = "textures/Meadow/";
+			var format = '.jpg';
+			var urls = [
+					path + 'posx' + format, path + 'negx' + format,
+					path + 'posy' + format, path + 'negy' + format,
+					path + 'posz' + format, path + 'negz' + format
+				];
+
+			var environmentCube = THREE.ImageUtils.loadTextureCube( urls );
+			var shader = THREE.ShaderLib[ "cube" ];
+			shader.uniforms[ "tCube" ].value = environmentCube;
+
+			var materialSkyBox = new THREE.ShaderMaterial( {
+
+				fragmentShader: shader.fragmentShader,
+				vertexShader: shader.vertexShader,
+				uniforms: shader.uniforms,
+				depthWrite: false,
+				side: THREE.BackSide
+
+			} );
+
+			var boxMesh = new THREE.Mesh( new THREE.BoxGeometry( 80000, 80000, 80000 ), materialSkyBox );
+			scene.add( boxMesh );
+			//fine skybox
+
+			function changeCamera( pov ){	//funzione che implementa il cambio di visuale sul cambio di giocatore e sul play/pause
+				if (pov == 0) {
+					pov = 0;
+					var l = Math.random();
+					var m = Math.random();
+					var n = Math.random();
+					var y = -320 + 1320*n;
+					var target = { x: (1000*l)-500, y: (600*m)-300, z: (1000*n)-500 };
+					tween = new TWEEN.Tween(camera.position).to(target, 9000);
+					tween.delay( 2000 );
+					tween.easing( TWEEN.Easing.Quadratic.Out );
+					tween.start();
+					controls.noZoom = false;
+					controls.noRotate = false;
+					controls.noPan = false;
+				} else if ( pov == 1 ) {
+					pov = 1;
+					player = 1;
+					var target = { x: 0, y: 100, z: 200 };
+					tween = new TWEEN.Tween(camera.position).to(target, 7000);
+					tween.delay( 100 );
+					tween.easing( TWEEN.Easing.Quadratic.Out );
+					tween.start();
+					camera.lookAt( 0, 40, 0 );
+					controls.noZoom = true;
+					controls.noRotate = true;
+					controls.noPan = true;
+					tween.onComplete( function(){ prepareToken( token ) } );//metto una tessera sopra il supporto e setto tokenPos a 0
+					tokenPos = 0;
+				} else if ( pov == -1 ){
+					pov = -1;
+					player = -1;
+					var target = { x: 0, y: 100, z: -200 };
+					tween = new TWEEN.Tween(camera.position).to(target, 7000);
+					tween.delay( 100 );
+					tween.easing( TWEEN.Easing.Quadratic.Out );
+					tween.start();
+					camera.lookAt( 0, 40, 0 );
+					controls.noZoom = true;
+					controls.noRotate = true;
+					controls.noPan = true;
+					tween.onComplete( function(){ prepareToken( token ) } );	//metto una tessera sopra il supporto e setto tokenPos a 0
+					tokenPos = 0;
+				}
+			}
+
+			function loadTokens(){	//creo le tessere...
+				tokenGeo = new THREE.CylinderGeometry( 5, 5, 5, 20 );
+					//...gialle...
+					for (var i = 0; i < 3; i++) {
+						for (var j = 0; j < 7; j++) {
+							tokenYellowMat = yellowMaterial;
+							yellowToken = new THREE.Mesh( tokenGeo, tokenYellowMat );
+							tokens.add( yellowToken );
+							x = -60 + j * 20;
+							z = -15 - i * 20;
+							yellowToken.position.set( x, 2.5, z );
+						}
+					}
+					//...e rosse
+					for (var i = 0; i < 3; i++) {
+						for (var j = 0; j < 7; j++) {
+							tokenRedMat = redMaterial;
+							redToken = new THREE.Mesh( tokenGeo, tokenRedMat );
+							tokens.add( redToken );
+							x = 60 - j * 20;
+							z = 15 + i * 20;
+							redToken.position.set( x, 2.5, z );
+						}
+					}
+				scene.add(tokens);
+			}
+
+			var loader = new THREE.OBJLoader();	// istanzio il loader
+
+			//carico e creo gli oggetti della scena
+			loader.load(
+				'models/connect4.obj',
+				//setto colore e posizione
+				function ( object ) {
+					object.traverse(	function( child ){
+											if (child instanceof THREE.Mesh) {
+												child.material = connect4Material;
+											}
+										} 
+									);
+					scene.add( object );
+					object.scale.set(10, 10, 10);
+				}
+			);
+
+			loader.load(
+				'models/mobile.obj',
+				//setto colore e posizione
+				function ( object ) {
+					object.traverse(	function( child ){
+											if (child instanceof THREE.Mesh) {
+												child.material = glossMaterial;
+											}
+										} 
+									);
+					scene.add( object );
+					object.scale.set( 150, 150, 150 );
+					object.rotation.y = - Math.PI / 2;
+					object.position.set( -1350, -330, 0 );
+				}
+			);
+
+			loader.load(
+				'models/chair.obj',
+				//setto colore e posizione
+				function ( object ) {
+					object.traverse(	function( child ){
+											if (child instanceof THREE.Mesh) {
+												child.material = glossMaterial;
+											}
+										} 
+									);
+					scene.add( object );
+					object.scale.set(200, 200, 200);
+					object.position.set( 0, -102, 350 );
+				}
+			);
+
+			loader.load(
+				'models/chair.obj',
+				//setto colore e posizione
+				function ( object ) {
+					object.traverse(	function( child ){
+											if (child instanceof THREE.Mesh) {
+												child.material = glossMaterial;
+											}
+										} 
+									);
+					scene.add( object );
+					object.scale.set(200, 200, 200);
+					object.rotation.y = Math.PI;
+					object.position.set( 0, -102, -350 );
+				}
+			);
+
+			loader.load(
+				'models/cornice.obj',
+				//setto colore e posizione
+				function ( object ) {
+					object.traverse(	function( child ){
+											if (child instanceof THREE.Mesh) {
+												child.material = glossMaterial;
+											}
+										} 
+									);
+					scene.add( object );
+					object.scale.set( 84, 84, 84 );
+					object.rotation.z = - Math.PI/2;
+					object.position.set( -1350, 450, 0 );
+				}
+			);
+
+			loader.load(
+				'models/baseLampada.obj',
+				//setto colore e posizione
+				function ( object ) {
+					object.traverse(	function( child ){
+											if (child instanceof THREE.Mesh) {
+												child.material = lampBaseMaterial;
+											}
+										} 
+									);
+					scene.add( object );
+					object.scale.set( 100, 100, 100 );
+					object.position.set( -1250, -330, -1000 );
+				}
+			);
+
+			loader.load(
+				'models/vetroLampada.obj',
+				//setto colore e posizione
+				function ( object ) {
+					object.traverse(	function( child ){
+											if (child instanceof THREE.Mesh) {
+												child.material = lamp2Material;
+											}
+										} 
+									);
+					scene.add( object );
+					object.scale.set( 100, 100, 100 );
+					object.position.set( -1250, 490, -1000 );
+				}
+			);
+
+			//creo il tavolo
+			table = new THREE.Object3D();
+			loader.load(
+				'models/table.obj',
+				//setto colore e posizione
+				function ( object ) {
+					object.traverse(	function( child ){
+											if (child instanceof THREE.Mesh) {
+												child.material = wood3Material;
+											}
+										} 
+									);
+					table.add( object );
+					object.scale.set( 40, 10, 40 );
+					object.position.set( 0, -10, 0 );
+				}
+			);
+
+			tableLegGeo = new THREE.CylinderGeometry( 40, 40, 300, 30 );
+			tableLeg = new THREE.Mesh( tableLegGeo, glossMaterial );
+			table.add( tableLeg );
+			tableLeg.position.y = -170;
+
+			tableBottomGeo = new THREE.CylinderGeometry( 100, 100, 20, 30 );
+			tableBottom = new THREE.Mesh( tableBottomGeo , glossMaterial );
+			table.add( tableBottom );
+			tableBottom.position.y = -320;
+
+			scene.add( table );	//aggiungo il tavolo al set di oggetti della scena
+
+			//creo la stanza
+			loader.load(
+				'models/wall1.obj',
+				//setto colore e posizione
+				function ( object ) {
+					object.traverse(	function( child ){
+											if (child instanceof THREE.Mesh) {
+												child.material = wallsMaterial;
+											}
+										} 
+									);
+					scene.add( object );
+					object.scale.set( 100, 100, 100 );
+					object.rotation.y = Math.PI/2;
+					object.position.set( 1390, -331, 0 );
+				}
+			);
+			loader.load(
+				'models/wall2.obj',
+				//setto colore e posizione
+				function ( object ) {
+					object.traverse(	function( child ){
+											if (child instanceof THREE.Mesh) {
+												child.material = wallsMaterial;
+											}
+										} 
+									);
+					scene.add( object );
+					object.scale.set( 100, 100, 100 );
+					object.rotation.y = Math.PI/2;
+					object.position.set( -1390, -331, 0 );
+				}
+			);
+			loader.load(
+				'models/wall3.obj',
+				//setto colore e posizione
+				function ( object ) {
+					object.traverse(	function( child ){
+											if (child instanceof THREE.Mesh) {
+												child.material = wallsMaterial;
+											}
+										} 
+									);
+					scene.add( object );
+					object.scale.set( 100, 100, 100 );
+					object.rotation.y = Math.PI;
+					object.position.set( 0, -331, 1190 );
+				}
+			);
+			loader.load(
+				'models/wall4.obj',
+				//setto colore e posizione
+				function ( object ) {
+					object.traverse(	function( child ){
+											if (child instanceof THREE.Mesh) {
+												child.material = wallsMaterial;
+											}
+										} 
+									);
+					scene.add( object );
+					object.scale.set( 100, 100, 100 );
+					object.position.set( 0, -331, -1190 );
+				}
+			);
+			loader.load(
+				'models/floor.obj',
+				//setto colore e posizione
+				function ( object ) {
+					object.traverse(	function( child ){
+											if (child instanceof THREE.Mesh) {
+												child.material = wallsMaterial;
+											}
+										} 
+									);
+					scene.add( object );
+					object.scale.set( 100, 100, 100 );
+					object.position.set( 0, -370, 0 );
+				}
+			);
+
+			roofGeo = new THREE.PlaneGeometry( 3200, 2800 );
+			roof = new THREE.Mesh( roofGeo, wallsMaterial );
+			scene.add( roof );
+			roof.rotation.x = Math.PI/2;
+			roof.position.set( 0, 870, 0 );
+
+			floorGeo = new THREE.PlaneGeometry( 2840, 2440 );
+			floor = new THREE.Mesh( floorGeo, wood1Material );
+			scene.add( floor );
+			floor.rotation.x = -Math.PI/2;
+			floor.position.set( 0, -330, 0 );
+
+			loader.load(
+				'models/roof.obj',
+				//setto colore e posizione
+				function ( object ) {
+					object.traverse(	function( child ){
+											if (child instanceof THREE.Mesh) {
+												child.material = rooftilesMaterial;
+											}
+										} 
+									);
+					scene.add( object );
+					object.scale.set( 100, 100, 100 );
+					object.position.set( 0, 870, 0 );
+				}
+			);
+			loader.load(
+				'models/window.obj',
+				//setto colore e posizione
+				function ( object ) {
+					object.traverse(	function( child ){
+											if (child instanceof THREE.Mesh) {
+												child.material = wood2Material;
+											}
+										} 
+									);
+					scene.add( object );
+					object.scale.set( 100, 100, 100 );
+					object.rotation.y = Math.PI/2;
+					object.position.set( 1400, 370, 0 );
+				}
+			);
+			loader.load(
+				'models/Door.obj',
+				//setto colore e posizione
+				function ( object ) {
+					object.traverse(	function( child ){
+											if (child instanceof THREE.Mesh) {
+												child.material = wood2Material;
+											}
+										} 
+									);
+					scene.add( object );
+					object.scale.set( 100, 100, 100 );
+					object.rotation.y = Math.PI;
+					object.position.set( 950, -330, 1200 );
+				}
+			);
+			loader.load(
+				'models/windowLocker.obj',
+				//setto colore e posizione
+				function ( object ) {
+					object.traverse(	function( child ){
+											if (child instanceof THREE.Mesh) {
+												child.material = brassMaterial;
+											}
+										} 
+									);
+					scene.add( object );
+					object.scale.set( 50, 50, 50 );
+					object.rotation.y = -Math.PI/2;
+					object.position.set( 1375, 370, 0 );
+				}
+			);
+			loader.load(
+				'models/DoorLocker.obj',
+				//setto colore e posizione
+				function ( object ) {
+					object.traverse(	function( child ){
+											if (child instanceof THREE.Mesh) {
+												child.material = brassMaterial;
+											}
+										} 
+									);
+					scene.add( object );
+					object.scale.set( 100, 100, 100 );
+					object.position.set( 1050, 100, 1175 );
+				}
+			);
+
+			//creo l'ambiente esterno
+			ambientGeo = new THREE.PlaneGeometry( 30000, 30000  );
+			ambient = new THREE.Mesh( ambientGeo, grassMaterial );
+			scene.add( ambient );
+			ambient.rotation.x = -Math.PI/2;
+			ambient.position.set( 0, -370, 0 );
+
+			//creo la plafoniera
+			lampGeo = new THREE.SphereGeometry( 250, 30, 30, 0, 2*Math.PI, Math.PI, 0.9 );
+			lampMat = lamp1Material; 
+			lampMat.side = THREE.BackSide;
+			lamp = new THREE.Mesh( lampGeo, lampMat );
+			scene.add( lamp );	//aggiungo la plafoniera al set di oggetti della scena
+			lamp.position.y = 1050;
+
+			//creo quadro
+			picture1Mat = new THREE.MeshFaceMaterial([
+							pictureMaterial, //setto i materiali della stanza
+					 		new THREE.MeshBasicMaterial( { color: 0xffffff } ), 
+					 		new THREE.MeshBasicMaterial( { color: 0xffffff } ), 
+					 		new THREE.MeshBasicMaterial( { color: 0xffffff } ), 
+							new THREE.MeshBasicMaterial( { color: 0xffffff } ), 
+					 		new THREE.MeshBasicMaterial( { color: 0xffffff } )
+							]);
+			picture1Geo = new THREE.BoxGeometry( 30, 600, 600 );
+			picture1 = new THREE.Mesh( picture1Geo, picture1Mat );
+			scene.add( picture1 );
+			picture1.position.set( -1335, 450, 0 );
+
+			/*
+				FINE CARICAMENTO/CREAZIONE OGGETTI SCENA
+			*/
+
+			//Setto il quaternione
+			var id = 0;
+			var qi = new THREE.Quaternion();
+			var qf = new THREE.Quaternion();
+				qf.setFromAxisAngle((new THREE.Vector3(1,0,0)).normalize(),Math.PI / 2);
+			var performRotation = false;
+
+			function prepareToken( t ){	//funzione che prende l'ultima tessera messa sul tavolo e la mette sopra il supporto
+				var target = { x: 0, y: 70, z: 0 };
+				if ( player == -1 ) {	//per tessere gialle
+					var position = tokens.children[ 20 - t ].position;
+					tween = new TWEEN.Tween(position).to(target, 1200);
+					tween.delay( 400 );
+					tween.easing( TWEEN.Easing.Quadratic.Out );
+					tween.onUpdate(function(){
+    					tokens.children[ 20 - t ].position.x = position.x;
+    					tokens.children[ 20 - t ].position.y = position.y;
+    					tokens.children[ 20 - t ].position.z = position.z;
+					});
+					tween.onComplete(function(){
+						qi.setFromAxisAngle((new THREE.Vector3(1,0,0)).normalize(),0);
+						tokens.children[ 20 - t ].quaternion.copy( qi );
+						id = 20 - t;
+						performRotation = true;
+					});
+				} else {				//per tessere rosse
+					var position = tokens.children[ 41 - t ].position;
+					var tween = new TWEEN.Tween(position).to(target, 1500);
+					tween.delay( 500 );
+					tween.onUpdate(function(){
+    					tokens.children[ 41 - t ].position.x = position.x;
+    					tokens.children[ 41 - t ].position.y = position.y;
+    					tokens.children[ 41 - t ].position.z = position.z;
+					});
+					tween.onComplete(function(){
+						qi.setFromAxisAngle((new THREE.Vector3(1,0,0)).normalize(),0);
+						tokens.children[ 41 - t ].quaternion.copy( qi );
+						id =  41 - t;
+						performRotation = true;
+					});
+					
+				}
+				tween.start();
+			}
+
+			function resetTokens(){ //rimette le tessere sul tavolo pronte per una nuova partita
+				for (var i = 0; i < 3; i++) {//tessere gialle
+						for (var j = 0; j < 7; j++) {
+							x = -60 + j * 20;
+							z = -15 - i * 20;
+							k = ( i * 7 ) + j;
+							tokens.children[ k ].position.set( x, 2.5, z );
+							tokens.children[ k ].rotation.x = 0;
+						}
+					}
+					for (var i = 0; i < 3; i++) {//tessere rosse
+						for (var j = 0; j < 7; j++) {
+							x = 60 - j * 20;
+							z = 15 + i * 20;
+							k = ( i * 7 ) + j;
+							tokens.children[ 21 + k ].position.set( x, 2.5, z );
+							tokens.children[ 21 + k ].rotation.x = 0;
+						}
+					}
+			}
+
+			//definizione di algoritmi e strutture dati per la logica di gioco
+			var connect4 = new Array( 6 );	//matrice che rappresenta la situazione di gioco
+			for (var i = 0; i < 6; i++) {
+				connect4[i] = new Array( 7 );
+				for (var j = 0; j < 7 ; j++) {
+					connect4[ i ][ j ] = 0;
+				}
+			}
+
+			function resetConnect4(){	//resetta la matrice, pronta per una nuova partitaa
+				for (var i = 0; i < 6; i++) {
+					for (var j = 0; j < 7 ; j++) {
+						connect4[ i ][ j ] = 0;
+					}
+				}
+			}
+
+			var support4 = new Array( 6 );	//matrice che tiene a mente le posizioni che sono già state controllate cosicché non si debba controllare più volte una riga che non ha 4 tessere
+			for (var i = 0; i < 6; i++) {
+				support4[i] = new Array( 7 );
+				for (var j = 0; j < 7 ; j++) {
+					support4[ i ][ j ] = true;
+				}
+			}
+
+			function resetSupport(){	//resetta la martice di supporto, viene fatto ogni cambio turno
+				for (var i = 0; i < 6; i++) {
+					for (var j = 0; j < 7 ; j++) {
+						support4[ i ][ j ] = true;
+					}
+				}
+			}
+
+			function firstFreePos( col ){	//trova la prima posizione libera di una colonna a partire dal basso
+				var n = 0;
+				while( connect4[ n ][ col ] != 0 ){
+					n++;
+				}
+				return n;
+			}
+
+			function isTheWinner(){	//controlla se il giocatore cha ha appena mosso ha vinto
+				for (var i = 5; i >= 0; i--) {
+					for (var j = 6; j >= 0; j--) {
+						if ( connect4[ i ][ j ] == player && support4[ i ][ j ] ){	//per ogni posizione del supporto se in quella posizione c'è una tessera del giocatore che sta giocando (che ha appena inserito la tessera) e se la posizione deve essere ancora controllata, vedo se nelle 8 posizioni vicine c'è un altra tessera dello stesso colore (giocatore) stando attenti a non controllare posizioni inesistenti, se ci sono le condizioni giuste, c'è un vincitore sennò no
+							if ( i >= 3 && connect4[ i - 1 ][ j ] == player && areThere4InARow( i, j, -1, 0 ) )					return true;
+							if ( i >= 3 && j >= 3 && connect4[ i - 1 ][ j -1 ] == player && areThere4InARow( i, j, -1, -1 ) )	return true;
+							if ( j >= 3 && connect4[ i ][ j -1 ] == player && areThere4InARow( i, j, 0, -1 ) )					return true;
+							if ( i <= 3 && j >= 3 && connect4[ i + 1 ][ j - 1 ] == player && areThere4InARow( i, j, 1, -1 ) )	return true;
+							if ( i <= 3 && connect4[ i + 1 ][ j ] == player && areThere4InARow( i, j, 1, 0 ) )					return true;
+							if ( i <= 3 && j <= 3 && connect4[ i + 1 ][ j + 1 ] == player && areThere4InARow( i, j, 1, 1 ) )	return true;
+							if ( j <= 3 && connect4[ i ][ j + 1 ] == player && areThere4InARow( i, j, 0, 1 ) )					return true;
+							if ( i >= 3 && j <= 3 && connect4[ i - 1 ][ j + 1 ] == player && areThere4InARow( i, j, -1, 1 ) )	return true;
+						}
+					}
+				}
+				return false;
+			}
+
+			function areThere4InARow( i, j, hDir, vDir ){	//controlla che nella direzione indicata dalla chiamata in isTheWinner ci siano altre sue tessere in linea
+				if ( connect4[ i + ( hDir * 2 ) ][ j + ( vDir * 2 ) ] == player && connect4[ i + ( hDir * 3 ) ][ j + ( vDir * 3 ) ] == player ) {
+					return true;	//se ci sono torno true
+				} else {			//se non ci sono metto false nel supporto nelle posizioni già controllate e torno false
+					support4[ i ][ j ] = false;
+					support4[ i + ( hDir ) ][ j + ( vDir ) ] = false;
+					support4[ i + ( hDir * 2 ) ][ j + ( vDir * 2 ) ] = false;
+					support4[ i + ( hDir * 3 ) ][ j + ( vDir * 3 ) ] = false;
+					return false;
+				}
+			}
+
+			var font = new THREE.Font();
+			var loader = new THREE.FontLoader();
+				loader.load( 'lib/optimer_regular.typeface.js', function ( response ) {
+					font = response;
+				} );
+
+			//event listener per lo spostamento del token tra le colonne e per il rilascio, implementa il cambio di turno (cambia player e visuale) automatico
+			function onDocumentKeyDown( event ){
+                // capisco che tasto è stato premuto
+                var keyCode = event.which;
+				// se freccia sinistra sposto la tessera di una colonna a sinistra
+				if( keyCode == 37 ){
+					if ( player == -1 && tokenPos < 40.5 ) {
+						tokenPos += 13.5;
+						tokens.children[ 20 - token ].position.x = tokenPos ;
+					}
+					if ( player == 1 && tokenPos > -40.5 ) {
+						tokenPos -= 13.5;
+						tokens.children[ 41 - token ].position.x = tokenPos ;
+					}
+				// se freccia destra sposto la tessera di una colonna a destra
+				} else if( keyCode == 39 ){
+					if ( player == -1 && tokenPos > -40.5 ) {
+						tokenPos -= 13.5;
+						tokens.children[ 20 - token ].position.x = tokenPos ;
+					}
+					if ( player == 1 && tokenPos < 40.5 ) {
+						tokenPos += 13.5;
+						tokens.children[ 41 - token ].position.x = tokenPos ;
+					}
+				//se invio o freccia giù
+				} else if( keyCode == 13 || keyCode == 40 ){
+					resetSupport();	//resetto la matrice di supporto per rifare il controllo
+					var col = ( tokenPos/13.5 ) + 3;	//capisco la colonna che il giocatore vuole selezionare
+					var ffp = firstFreePos( col );		//capisco la prima posizione libera nella colonna
+					var position = { x: col, y: 70, z: 0 };
+					var target = { x: col, y: 10 * ( ffp + 1 ), z: 0 };
+					tween = new TWEEN.Tween(position).to(target, 1200);
+					tween.delay( 100 );
+					tween.easing( TWEEN.Easing.Bounce.Out );
+					if ( player == -1 ) {
+						tween.onUpdate(function(){
+    						tokens.children[ 21 - token ].position.y = position.y;
+						});
+						token++;	//al prossimo turno si prende una nuova tessera
+					} else {
+						tween.onUpdate(function(){
+    						tokens.children[ 41 - token ].position.y = position.y;
+						});
+					}
+					tween.start();
+					tween.onComplete(
+						function(){
+							connect4[ ffp ][ col ] = player; //moifico la matrice coerentemente con la situazione
+							if ( isTheWinner() ) {	//se c'è un vincitore aggiungo il messaggio di vittoria e disabilito i comandi
+								if ( player == -1 ) {
+									winningTextGeo = new THREE.TextGeometry( 'The winner is...the YELLOW player!', { font: font, size: 10, height: 1 } );
+									winningText = new THREE.Mesh( winningTextGeo, tokenYellowMat );
+									winningText.position.set( 103, 50, -75 );
+									winningText.rotation.y = Math.PI;
+									scene.add( winningText );
+									makeParticles( player );
+								} else {
+									winningTextGeo = new THREE.TextGeometry( 'The winner is...the RED player!', { font: font, size: 10, height: 1 } );
+									winningTextMat = new THREE.MeshBasicMaterial( { color: 0xff0000 } );
+									winningText = new THREE.Mesh( winningTextGeo, tokenRedMat );
+									winningText.position.set( -93, 50, 75 );
+									scene.add( winningText );
+									makeParticles( player );
+								}
+							document.removeEventListener("keydown", onDocumentKeyDown, false);
+						} else {	//sennò cambio turno
+							changeCamera( player * ( -1 ) );
+						}
+					});
+				}
+            }
+			
+			//Creo il sistema particellare per la sorpresa finale
+			function makeParticles( winner ){
+				for (var p = 0; p < pNum; p++) {
+				    var particle = new THREE.Vector3(Math.random() * 2800 - 1400, Math.random() * 1900 - 950, Math.random() * 2400 - 1200);
+				    particles.vertices.push(particle);
+				}
+				var particleMaterial;
+				if ( winner == -1 ) {
+					particleMaterial = new THREE.PointsMaterial( { color: 0xffff00, size: 10 });
+				} else {
+					particleMaterial = new THREE.PointsMaterial( { color: 0xff0000, size: 10 });
+				}
+				pointsSystem = new THREE.Points(particles, particleMaterial );
+				scene.add(pointsSystem);				
+			}
+			
+			//...e lo faccio muovere
+			function updateParticles(delta){
+				for (var i = 0; i < particles.vertices.length; i++) {
+					var p = particles.vertices[i];
+					p.setY( p.getComponent( 1 ) -( t * 100 ) );
+					if ( p.getComponent( 1 ) <= -950 ) {
+						p.setY( 950 );
+					}
+				}
+				particles.verticesNeedUpdate = true;
+			}
+
+			var clock = new THREE.Clock(true);
+			var step = 0;
+			t = 0;
+			function render() {	//ciclo di rendering
+				requestAnimationFrame(render);
+				stats.update();
+				controls.update();
+
+				TWEEN.update();
+
+				t = clock.getDelta();
+				updateParticles(t);
+
+				//quaternioni
+				if ( performRotation && step <= 1 ) {
+					tokens.children[ id ].quaternion.copy( qi.slerp( qf, step ) );
+					step += 0.01
+				} else {
+					performRotation = false;
+					step = 0;
+				}
+
+				composer.render();
+			}
+			render();
+		</script>
+	</body>
+</html>
