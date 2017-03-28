@@ -1,0 +1,249 @@
+var SEARCH_DEPTH = 4;
+
+function evaluator( player ){
+	var score = 0;
+	var COEFF = 10;
+	var eval = new Array(6);
+
+	for (var i = 0; i < eval.lenght; i++) {
+		Array[i] = new Array(7);
+		for (var j = 0; j < eval[i].length; j++) {
+			eval[i][j] = new Array(9);
+			for (var k = 0; k < eval[i][j].length; k++) {
+					eval[i][j][k] = 1; // inizializzo il valore della direzione della cella a 1
+			}
+		}
+	}
+
+	for (var i = 0; i < eval.lenght; i++) {
+		for (var j = 0; j < eval[i].length; j++) {
+			for (var k = 0; k < eval[i][j].length; k++) {
+				if( this[i][j] == player ){
+					if ( i <= 2 && j <= 2 ) {
+						//se la direzione mi portasse fuori dalla matrice metto 0 a tale direzione
+						eval[i][j][0] = 0; eval[i][j][1] = 0; eval[i][j][2] = 0; eval[i][j][3] = 0; eval[i][j][6] = 0;
+						for (var n = 1; n < 4; n++) {
+							//se trovo una cella nella direzione osservata dove c'è una pedina avversaria metto 0 alla direzione
+							//sennò moltiplico il valore di eval per tale cella-direzione per COEFF elevato al valore (assoluto) della cella di this
+							//che vedo cosicchè se c'è 0 (cella vuota) moltiplico per 1 se c'è una tessera di player (1 o -1) moltiplico per 10
+							if (this[i+n][j+n] == player*(-1)) {
+								eval[i][j][8] = 0;
+							} else {
+								eval[i][j][8] *= Math.pow(COEFF,Math.abs(this[i+n][j+n]));
+							}
+							if (this[i+n][j  ] == player*(-1)) {
+								eval[i][j][7] = 0;
+							} else {
+								eval[i][j][7] *= Math.pow(COEFF,Math.abs(this[i+n][j  ]));
+							}
+							if (this[i  ][j+n] == player*(-1)) {
+								eval[i][j][5] = 0;
+							} else {
+								eval[i][j][5] *= Math.pow(COEFF,Math.abs(this[i  ][j+n]));
+							}
+						}
+						for (var dir = 0; i < 9; i++) {
+							score += eval[i][j][dir];
+						}
+					} else if( i <= 2 && j == 3 ){
+						//se la direzione mi portasse fuori dalla matrice metto 0 a tale direzione
+						eval[i][j][0] = 0; eval[i][j][1] = 0; eval[i][j][2] = 0; eval[i][j][5] = 0; eval[i][j][8] = 0;
+						for (var n = 1; n < 4; n++) {
+							//se trovo una cella nella direzione osservata dove c'è una pedina avversaria metto 0 alla direzione
+							//sennò moltiplico il valore di eval per tale cella-direzione per COEFF elevato al valore (assoluto) della cella di this
+							//che vedo cosicchè se c'è 0 (cella vuota) moltiplico per 1 se c'è una tessera di player (1 o -1) moltiplico per 10
+							if (this[i+n][j  ] == player*(-1)) {
+								eval[i][j][7] = 0;
+							} else {
+								eval[i][j][7] *= Math.pow(COEFF,Math.abs(this[i+n][j  ]));
+							}
+							if (this[i  ][j-n] == player*(-1)) {
+								eval[i][j][3] = 0;
+							} else {
+								eval[i][j][3] *= Math.pow(COEFF,Math.abs(this[i  ][j-n]));
+							}
+							if (this[i+n][j-n] == player*(-1)) {
+								eval[i][j][6] = 0;
+							} else {
+								eval[i][j][6] *= Math.pow(COEFF,Math.abs(this[i+n][j-n]));
+							}
+						}
+						for (var dir = 0; i < 9; i++) {
+							score += eval[i][j][dir];
+						}
+					} else if( i <= 2 && j >= 4 ){
+						//se la direzione mi portasse fuori dalla matrice metto 0 a tale direzione
+						eval[i][j][0] = 0; eval[i][j][1] = 0; eval[i][j][2] = 0;
+						for (var n = 1; n < 4; n++) {
+							//se trovo una cella nella direzione osservata dove c'è una pedina avversaria metto 0 alla direzione
+							//sennò moltiplico il valore di eval per tale cella-direzione per COEFF elevato al valore (assoluto) della cella di this
+							//che vedo cosicchè se c'è 0 (cella vuota) moltiplico per 1 se c'è una tessera di player (1 o -1) moltiplico per 10
+							if (this[i+n][j+n] == player*(-1)) {
+								eval[i][j][8] = 0;
+							} else {
+								eval[i][j][8] *= Math.pow(COEFF,Math.abs(this[i+n][j+n]));
+							}
+							if (this[i+n][j  ] == player*(-1)) {
+								eval[i][j][7] = 0;
+							} else {
+								eval[i][j][7] *= Math.pow(COEFF,Math.abs(this[i+n][j  ]));
+							}
+							if (this[i  ][j+n] == player*(-1)) {
+								eval[i][j][5] = 0;
+							} else {
+								eval[i][j][5] *= Math.pow(COEFF,Math.abs(this[i  ][j+n]));
+							}
+							if (this[i  ][j-n] == player*(-1)) {
+								eval[i][j][3] = 0;
+							} else {
+								eval[i][j][3] *= Math.pow(COEFF,Math.abs(this[i  ][j-n]));
+							}
+							if (this[i+n][j-n] == player*(-1)) {
+								eval[i][j][6] = 0;
+							} else {
+								eval[i][j][6] *= Math.pow(COEFF,Math.abs(this[i+n][j-n]));
+							}
+						}
+						for (var dir = 0; i < 9; i++) {
+							score += eval[i][j][dir];
+						}
+					} else if( i >= 3 && j <= 2 ) {
+						//se la direzione mi portasse fuori dalla matrice metto 0 a tale direzione
+						eval[i][j][6] = 0; eval[i][j][7] = 0; eval[i][j][8] = 0; eval[i][j][3] = 0; eval[i][j][0] = 0;
+						for (var n = 1; n < 4; n++) {
+							//se trovo una cella nella direzione osservata dove c'è una pedina avversaria metto 0 alla direzione
+							//sennò moltiplico il valore di eval per tale cella-direzione per COEFF elevato al valore (assoluto) della cella di this
+							//che vedo cosicchè se c'è 0 (cella vuota) moltiplico per 1 se c'è una tessera di player (1 o -1) moltiplico per 10
+							if (this[i-n][j+n] == player*(-1)) {
+								eval[i][j][2] = 0;
+							} else {
+								eval[i][j][2] *= Math.pow(COEFF,Math.abs(this[i-n][j+n]));
+							}
+							if (this[i-n][j  ] == player*(-1)) {
+								eval[i][j][1] = 0;
+							} else {
+								eval[i][j][1] *= Math.pow(COEFF,Math.abs(this[i-n][j  ]));
+							}
+							if (this[i  ][j+n] == player*(-1)) {
+								eval[i][j][5] = 0;
+							} else {
+								eval[i][j][5] *= Math.pow(COEFF,Math.abs(this[i  ][j+n]));
+							}
+						}
+						for (var dir = 0; i < 9; i++) {
+							score += eval[i][j][dir];
+						}
+					} else if( i >= 3 && j == 3 ){
+						//se la direzione mi portasse fuori dalla matrice metto 0 a tale direzione
+						eval[i][j][6] = 0; eval[i][j][7] = 0; eval[i][j][8] = 0;
+						for (var n = 1; n < 4; n++) {
+							//se trovo una cella nella direzione osservata dove c'è una pedina avversaria metto 0 alla direzione
+							//sennò moltiplico il valore di eval per tale cella-direzione per COEFF elevato al valore (assoluto) della cella di this
+							//che vedo cosicchè se c'è 0 (cella vuota) moltiplico per 1 se c'è una tessera di player (1 o -1) moltiplico per 10
+							if (this[i-n][j+n] == player*(-1)) {
+								eval[i][j][2] = 0;
+							} else {
+								eval[i][j][2] *= Math.pow(COEFF,Math.abs(this[i-n][j+n]));
+							}
+							if (this[i-n][j  ] == player*(-1)) {
+								eval[i][j][1] = 0;
+							} else {
+								eval[i][j][1] *= Math.pow(COEFF,Math.abs(this[i-n][j  ]));
+							}
+							if (this[i  ][j+n] == player*(-1)) {
+								eval[i][j][5] = 0;
+							} else {
+								eval[i][j][5] *= Math.pow(COEFF,Math.abs(this[i  ][j+n]));
+							}
+							if (this[i-n][j-n] == player*(-1)) {
+								eval[i][j][0] = 0;
+							} else {
+								eval[i][j][0] *= Math.pow(COEFF,Math.abs(this[i-n][j-n]));
+							}
+							if (this[i  ][j-n] == player*(-1)) {
+								eval[i][j][3] = 0;
+							} else {
+								eval[i][j][3] *= Math.pow(COEFF,Math.abs(this[i  ][j-n]));
+							}
+						}
+						for (var dir = 0; i < 9; i++) {
+							score += eval[i][j][dir];
+						}
+					} else if( i >= 3 && j >= 4 ){
+						//se la direzione mi portasse fuori dalla matrice metto 0 a tale direzione
+						eval[i][j][6] = 0; eval[i][j][7] = 0; eval[i][j][8] = 0; eval[i][j][5] = 0; eval[i][j][2] = 0;
+						for (var n = 1; n < 4; n++) {
+							//se trovo una cella nella direzione osservata dove c'è una pedina avversaria metto 0 alla direzione
+							//sennò moltiplico il valore di eval per tale cella-direzione per COEFF elevato al valore (assoluto) della cella di this
+							//che vedo cosicchè se c'è 0 (cella vuota) moltiplico per 1 se c'è una tessera di player (1 o -1) moltiplico per 10
+							if (this[i-n][j  ] == player*(-1)) {
+								eval[i][j][1] = 0;
+							} else {
+								eval[i][j][1] *= Math.pow(COEFF,Math.abs(this[i-n][j  ]));
+							}
+							if (this[i-n][j-n] == player*(-1)) {
+								eval[i][j][0] = 0;
+							} else {
+								eval[i][j][0] *= Math.pow(COEFF,Math.abs(this[i-n][j-n]));
+							}
+							if (this[i  ][j-n] == player*(-1)) {
+								eval[i][j][3] = 0;
+							} else {
+								eval[i][j][3] *= Math.pow(COEFF,Math.abs(this[i  ][j-n]));
+							}
+						}
+						for (var dir = 0; i < 9; i++) {
+							score += eval[i][j][dir];
+						}
+					} else {
+						alert("Error on this evaluation!");
+					}
+				}
+			}
+		}
+	}
+	return score;
+}
+
+function minimax( curConf, curPl, curFFP, min, max, searchDepth ){
+	var configs = new Array( 7 );
+	var ffps = new Array( 7 );
+	if ( searchDepth > 0 ) {
+		for (var i = 0; i < 7; i++) {
+			configs[i] = new Array( 6 );
+			for (var row = 0; row < 6; row++) {
+				configs[i][row] = new Array( 7 );
+				ffps[i] = new Array( 7 );
+				for (var col = 0; col < 7; col++) {
+					if ( i==col && curFFP[i]==row ) {
+						configs[i][row][col] = curPl;
+						ffps[i][col] = curFFP[col] + 1;
+					} else {
+						configs[i][row][col] = curConf[row][col];
+						ffps[i][col] = curFFP[col];
+					}
+				}
+			}
+		}
+		var vals = new Array( 7 );
+		for (var i = 0; i < 7; i++) {
+			vals[i] = minimax( configs[i], curPl, ffps[i], min, max, searchDepth-1  );
+		}
+		if ( searchDepth == SEARCH_DEPTH ) {
+			var supp = vals;
+			supp.sort();
+			return vals.indexOf( supp[6] );
+		} else if ( searchDepth % 2 == 0 && searchDepth != SEARCH_DEPTH ) {
+			vals.sort();
+			return vals[6];
+		} else {
+			vals.sort();
+			return vals[0];
+		}
+	}
+	return curConf.evaluator(curPl);
+}
+
+function move( firstConfig, firstPlayer, firstFFP ) {
+	return minimax( firstConfig, firstPlayer, firstFFP, Number.NEGATIVE_INFINITY, Number.POSITIVE_INFINITY, SEARCH_DEPTH );
+}
