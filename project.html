@@ -1,6 +1,6 @@
 <html>
 	<head>
-		<title>4 in a row - Francesco Andreussi 118708</title>
+		<title>Progetto di Tesi - 4 in a row - Francesco Andreussi 118708</title>
 		<style>
 		body {
 			font-family: Monospace;
@@ -31,6 +31,7 @@
 		<script src="lib/ShaderPass.js"></script>
 		<script src="lib/RenderPass.js"></script>
 		<script src="lib/MaskPass.js"></script>
+		<script src="minimax.js"></script>
 	</head>
 	<body>
 		<div id="controls">
@@ -272,6 +273,9 @@
 			var all = new THREE.Object3D();	//oggetto dove verranno aggiunti tutti gli oggetti della scena
 			var tokens = new THREE.Object3D();
 			scene.add( all );
+			var winningText;
+			var draftText1;
+			var draftText2;
 			
 			//...e LUCE fu! (aggiunte le luci)
 			var Slight1 = new THREE.SpotLight( 0xfffff0, 5, 800, Math.PI/2, 0.5, 2 );
@@ -409,14 +413,14 @@
 				ambientLight: 		{ type: "v3", value: new THREE.Vector3() }
 			};
 
-			var grassUniforms = {
-				texture:			{ type: "t", value: THREE.ImageUtils.loadTexture( "textures/grass/grass.jpg" ) },
+			var groundUniforms = {
+				texture:			{ type: "t", value: THREE.ImageUtils.loadTexture( "textures/Forest/negy.jpg" ) /**/ },
 				c_spec: 			{ type: "v3", value: new THREE.Vector3() },
 				pointLightPosition:	{ type: "v3v", value: [ new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3() ] },
 				lightPower:			{ type: "v3v", value: [ new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3() ] },
 				s: 					{ type: "f", value: 1.0 },
 				alpha: 				{ type: "f", value: 1.0 },
-				repetitions: 		{ type: "f", value: 4.0 },
+				repetitions: 		{ type: "f", value: 1.0 },
 				ambientLight: 		{ type: "v3", value: new THREE.Vector3() }
 			};
 
@@ -492,13 +496,13 @@
 			pictureUniforms.lightPower.value = wood1Uniforms.lightPower.value;
 			pictureUniforms.c_spec.value = new THREE.Vector3( 0.0, 0.0, 0.0);
 
-			grassUniforms.pointLightPosition.value = wood1Uniforms.pointLightPosition.value;
-			grassUniforms.lightPower.value = wood1Uniforms.lightPower.value;
-			grassUniforms.c_spec.value = new THREE.Vector3( 0.0, 0.0, 0.0);
+			groundUniforms.pointLightPosition.value = wood1Uniforms.pointLightPosition.value;
+			groundUniforms.lightPower.value = wood1Uniforms.lightPower.value;
+			groundUniforms.c_spec.value = new THREE.Vector3( 0.0, 0.0, 0.0);
 
 			glossUniforms.pointLightPosition.value = wood1Uniforms.pointLightPosition.value;
 			glossUniforms.lightPower.value = wood1Uniforms.lightPower.value;
-			glossUniforms.rho.value = ( new THREE.Vector3( 0.2, 0.2, 0.2 ) ).divideScalar(Math.PI);
+			glossUniforms.rho.value = ( new THREE.Vector3( 0.7, 0.7, 0.7 ) ).divideScalar(Math.PI);
 			glossUniforms.c_spec.value = new THREE.Vector3( 0.05, 0.05, 0.05);
 
 			brassUniforms.pointLightPosition.value = wood1Uniforms.pointLightPosition.value;
@@ -513,7 +517,7 @@
 
 			connect4Uniforms.pointLightPosition.value = wood1Uniforms.pointLightPosition.value;
 			connect4Uniforms.lightPower.value = wood1Uniforms.lightPower.value;
-			connect4Uniforms.rho.value = ( new THREE.Vector3( 0.1, 0.1, 0.95 ) ).divideScalar(Math.PI);
+			connect4Uniforms.rho.value = ( new THREE.Vector3( 0.15, 0.15, 0.9 ) ).divideScalar(Math.PI);
 			connect4Uniforms.c_spec.value = new THREE.Vector3( 0.05, 0.05, 0.05);
 
 			redUniforms.pointLightPosition.value = wood1Uniforms.pointLightPosition.value;
@@ -536,7 +540,7 @@
 			wood3Material = new THREE.ShaderMaterial( { uniforms: wood3Uniforms, vertexShader: vs, fragmentShader: Tfs } );
 			rooftilesMaterial = new THREE.ShaderMaterial( { uniforms: rooftilesUniforms, vertexShader: vs, fragmentShader: Tfs } );
 			pictureMaterial = new THREE.ShaderMaterial( { uniforms: pictureUniforms, vertexShader: vs, fragmentShader: Tfs } );
-			grassMaterial = new THREE.ShaderMaterial( { uniforms: grassUniforms, vertexShader: vs, fragmentShader: Tfs } );
+			groundMaterial = new THREE.ShaderMaterial( { uniforms: groundUniforms, vertexShader: vs, fragmentShader: Tfs } );
 			brassMaterial = new THREE.ShaderMaterial( { uniforms: brassUniforms, vertexShader: vs, fragmentShader: fs } );
 			lampBaseMaterial = new THREE.ShaderMaterial( { uniforms: lampBaseUniforms, vertexShader: vs, fragmentShader: fs } );
 			connect4Material = new THREE.ShaderMaterial( { uniforms: connect4Uniforms, vertexShader: vs, fragmentShader: fs } );
@@ -574,48 +578,77 @@
 				negEffect.enabled = neg.checked;
 			}
 
-			//creo la GUI
-			window.onload = function(){
-				var gui = new dat.GUI();
-				var game = new commands();
-				gui.add( game, 'startNewGame' );
-				gui.add( game, 'play' );
-				gui.add( game, 'pause' );
-			}
-			//creo le funzioni della dat.GUI
-			var commands = function(){
-				this.startNewGame = function(){
-					player = 1;
-					token = 0;
-					resetTokens();
-					resetConnect4();
-					resetSupport();
-					scene.remove( winningText );
-					scene.remove( pointsSystem );
-					changeCamera( 0 );
-					document.removeEventListener("keydown", onDocumentKeyDown, false);
-				};
-				this.play = function(){
-					if( ! isTheWinner() ){
-						changeCamera( player );
-						document.addEventListener("keydown", onDocumentKeyDown, false);
-					}
-				};
-				this.pause = function(){
-					changeCamera( 0 );
-					document.removeEventListener("keydown", onDocumentKeyDown, false);
-				};
-
-			}
-			
 			var player;						//variabile globale per gestire il cambio turno
 			var token;						//variabile globale per gestire il consumo di tessere
 			var tokenPos;					//variabile globale per gestire lo spostamento delle tessere tra le colonne per evitare che escano dai limiti
 			var pov;						//variabile globale per gestire il punto di vista dell'utente
 			var position;					//variabile globale per gestire la selezione delle colonne
+			var isYAI;						//variabile globale per memorizzare se il giocatore 1 è reale o AI
+			var YAIlevel;					//variabile globale per memorizzare il livello di "bravura" del giocatore 1
+			var isRAI;						//variabile globale per memorizzare se il giocatore 2 è reale o AI
+			var RAIlevel;					//variabile globale per memorizzare il livello di "bravura" del giocatore 2
+			var inPosition = false;			//variabile globale per controllare se devo muovere la visuale nel caso "uomo vs macchina"
+			//creo la GUI
+			window.onload = function(){
+				gui = new dat.GUI();
+				//creo le funzioni della dat.GUI
+				var game = {
+					startNewGame : function(){
+						player = 1;
+						token = 0;
+						resetTokens();
+						resetConnect4();
+						resetSupport();
+						scene.remove( winningText );
+						scene.remove( pointsSystem );
+						scene.remove( draftText1 );
+						scene.remove( draftText2 );
+						changeCamera( 0 );
+						document.removeEventListener("keydown", onDocumentKeyDown, false);
+					},
+					play : function(){
+						alert(isTheWinner());
+						if( ! isTheWinner() ){
+							changeCamera( player );
+							document.addEventListener("keydown", onDocumentKeyDown, false);
+						}
+					},
+					pause : function(){
+						changeCamera( 0 );
+						document.removeEventListener("keydown", onDocumentKeyDown, false);
+					},
+					nOfPlayers : 2,
+					yLevel : 2,
+					rLevel : 2,
+				}
+				gui.add( game, 'startNewGame' ).name( "Start new game" );
+				gui.add( game, 'play' ).name( "Play" );
+				gui.add( game, 'pause' ).name( "Pause" );
+				gui.add( game, 'nOfPlayers', 0, 2 ).step( 1 ).name( "Players" ).listen().onChange( function(value){ setPlayers(value); } );
+				gui.add( game, 'yLevel', 1, 4 ).step( 1 ).name( "Yellow Level" ).listen().onChange( function(value){ YAIlevel = value; } );
+				gui.add( game, 'rLevel', 1, 4 ).step( 1 ).name( "Red Level" ).listen().onChange( function(value){ RAIlevel = value; } );
+			}
+
+			function setPlayers( value ){
+				if ( value == 0 ) {
+					isYAI = true;
+					isRAI = true;
+				} else if ( value == 1 ) {
+					isYAI = true;
+					isRAI = false;
+				} else {
+					isYAI = false;
+					isRAI = false;
+				}
+			}
+
 			init();							//inizializzo le variabili e la scena
 			function init(){
 				player = 1;
+				isYAI = false;
+				YAIlevel = 2;
+				isRAI = false;
+				RAIlevel = 2;
 				token = 0;
 				loadTokens();
 				instructions.innerHTML = '<div>Press LEFT/RIGHT to choose column and DOWN/ENTER to select it...Enjoy!</div>';
@@ -646,7 +679,7 @@
 			}
 
 			//Skybox
-			var path = "textures/Meadow/";
+			var path = "textures/Forest/";
 			var format = '.jpg';
 			var urls = [
 					path + 'posx' + format, path + 'negx' + format,
@@ -668,7 +701,7 @@
 
 			} );
 
-			var boxMesh = new THREE.Mesh( new THREE.BoxGeometry( 80000, 80000, 80000 ), materialSkyBox );
+			var boxMesh = new THREE.Mesh( new THREE.BoxGeometry( 40000, 40000, 40000 ), materialSkyBox );
 			scene.add( boxMesh );
 			//fine skybox
 
@@ -690,30 +723,50 @@
 				} else if ( pov == 1 ) {
 					pov = 1;
 					player = 1;
-					var target = { x: 0, y: 100, z: 200 };
-					tween = new TWEEN.Tween(camera.position).to(target, 7000);
-					tween.delay( 100 );
-					tween.easing( TWEEN.Easing.Quadratic.Out );
-					tween.start();
-					camera.lookAt( 0, 40, 0 );
 					controls.noZoom = true;
 					controls.noRotate = true;
 					controls.noPan = true;
-					tween.onComplete( function(){ prepareToken( token ) } );//metto una tessera sopra il supporto e setto tokenPos a 0
+					if ( ! isRAI ){
+						document.addEventListener("keydown", onDocumentKeyDown, false);
+						if ( ! inPosition ) {
+							inPosition = true;
+							var target = { x: 0, y: 100, z: 200 };
+							tween = new TWEEN.Tween(camera.position).to(target, 7000);
+							tween.delay( 100 );
+							tween.easing( TWEEN.Easing.Quadratic.Out );
+							tween.start();
+							camera.lookAt( 0, 40, 0 );
+							tween.onComplete( function(){ prepareToken( token ) } );//metto una tessera sopra il supporto e setto tokenPos a 0
+						} else {
+							prepareToken( token );
+						}
+					} else {
+						//chiamata al solver
+						var cc = move(RAIlevel*2,1,connect4,firstFreePos);
+						simulateMove(token,1,cc);
+					}
 					tokenPos = 0;
 				} else if ( pov == -1 ){
 					pov = -1;
 					player = -1;
-					var target = { x: 0, y: 100, z: -200 };
-					tween = new TWEEN.Tween(camera.position).to(target, 7000);
-					tween.delay( 100 );
-					tween.easing( TWEEN.Easing.Quadratic.Out );
-					tween.start();
-					camera.lookAt( 0, 40, 0 );
 					controls.noZoom = true;
 					controls.noRotate = true;
 					controls.noPan = true;
-					tween.onComplete( function(){ prepareToken( token ) } );	//metto una tessera sopra il supporto e setto tokenPos a 0
+					if ( ! isYAI ){
+						var target = { x: 0, y: 100, z: -200 };
+						tween = new TWEEN.Tween(camera.position).to(target, 7000);
+						tween.delay( 100 );
+						tween.easing( TWEEN.Easing.Quadratic.Out );
+						tween.start();
+						camera.lookAt( 0, 30, 0 );
+						document.addEventListener("keydown", onDocumentKeyDown, false);
+						tween.onComplete( function(){ prepareToken( token ) } );//metto una tessera sopra il supporto e setto tokenPos a 0
+					} else {
+						//chiamata al solver
+						var cc = move(YAIlevel*2,-1,connect4,firstFreePos);
+						simulateMove(token,-1,cc);
+						//alert(cc+1);
+					}
 					tokenPos = 0;
 				}
 			}
@@ -743,6 +796,7 @@
 						}
 					}
 				scene.add(tokens);
+				
 			}
 
 			var loader = new THREE.OBJLoader();	// istanzio il loader
@@ -1065,8 +1119,8 @@
 
 			//creo l'ambiente esterno
 			ambientGeo = new THREE.PlaneGeometry( 30000, 30000  );
-			ambient = new THREE.Mesh( ambientGeo, grassMaterial );
-			scene.add( ambient );
+			ambient = new THREE.Mesh( ambientGeo, groundMaterial );
+			//scene.add( ambient );
 			ambient.rotation.x = -Math.PI/2;
 			ambient.position.set( 0, -370, 0 );
 
@@ -1111,9 +1165,9 @@
 					tween.delay( 400 );
 					tween.easing( TWEEN.Easing.Quadratic.Out );
 					tween.onUpdate(function(){
-    					tokens.children[ 20 - t ].position.x = position.x;
-    					tokens.children[ 20 - t ].position.y = position.y;
-    					tokens.children[ 20 - t ].position.z = position.z;
+						tokens.children[ 20 - t ].position.x = position.x;
+						tokens.children[ 20 - t ].position.y = position.y;
+						tokens.children[ 20 - t ].position.z = position.z;
 					});
 					tween.onComplete(function(){
 						qi.setFromAxisAngle((new THREE.Vector3(1,0,0)).normalize(),0);
@@ -1123,8 +1177,48 @@
 					});
 				} else {				//per tessere rosse
 					var position = tokens.children[ 41 - t ].position;
-					var tween = new TWEEN.Tween(position).to(target, 1500);
-					tween.delay( 500 );
+					var tween = new TWEEN.Tween(position).to(target, 1200);
+					tween.delay( 400 );
+					tween.onUpdate(function(){
+						tokens.children[ 41 - t ].position.x = position.x;
+						tokens.children[ 41 - t ].position.y = position.y;
+						tokens.children[ 41 - t ].position.z = position.z;
+					});
+					tween.onComplete(function(){
+						qi.setFromAxisAngle((new THREE.Vector3(1,0,0)).normalize(),0);
+						tokens.children[ 41 - t ].quaternion.copy( qi );
+						id =  41 - t;
+						performRotation = true;
+					});
+					
+				}
+				tween.start();
+			}
+
+			function simulateMove( t, player, col ){	//funzione che prende l'ultima tessera messa sul tavolo e la mette sopra il supporto
+				document.removeEventListener("keydown", onDocumentKeyDown);
+				var target = { x: 13.5*(col-3), y: 70, z: 0 };
+				if ( player == -1 ) {	//per tessere gialle
+					var position = tokens.children[ 20 - t ].position;
+					tween = new TWEEN.Tween(position).to(target, 1200);
+					tween.delay( 400 );
+					tween.easing( TWEEN.Easing.Quadratic.Out );
+					tween.onUpdate(function(){
+    					tokens.children[ 20 - t ].position.x = position.x;
+    					tokens.children[ 20 - t ].position.y = position.y;
+    					tokens.children[ 20 - t ].position.z = position.z;
+					});
+					tween.onComplete(function(){
+						qi.setFromAxisAngle((new THREE.Vector3(1,0,0)).normalize(),0);
+						tokens.children[ 20 - t ].quaternion.copy( qi );
+						id = 20 - t;
+						performRotation = true;
+						performAIMove(col);
+					});
+				} else {				//per tessere rosse
+					var position = tokens.children[ 41 - t ].position;
+					var tween = new TWEEN.Tween(position).to(target, 1200);
+					tween.delay( 400 );
 					tween.onUpdate(function(){
     					tokens.children[ 41 - t ].position.x = position.x;
     					tokens.children[ 41 - t ].position.y = position.y;
@@ -1135,6 +1229,7 @@
 						tokens.children[ 41 - t ].quaternion.copy( qi );
 						id =  41 - t;
 						performRotation = true;
+						performAIMove(col);
 					});
 					
 				}
@@ -1175,6 +1270,7 @@
 				for (var i = 0; i < 6; i++) {
 					for (var j = 0; j < 7 ; j++) {
 						connect4[ i ][ j ] = 0;
+						firstFreePos[j] = 0;
 					}
 				}
 			}
@@ -1195,26 +1291,20 @@
 				}
 			}
 
-			function firstFreePos( col ){	//trova la prima posizione libera di una colonna a partire dal basso
-				var n = 0;
-				while( connect4[ n ][ col ] != 0 ){
-					n++;
-				}
-				return n;
-			}
+			var firstFreePos = [0,0,0,0,0,0,0];
 
 			function isTheWinner(){	//controlla se il giocatore cha ha appena mosso ha vinto
-				for (var i = 5; i >= 0; i--) {
-					for (var j = 6; j >= 0; j--) {
-						if ( connect4[ i ][ j ] == player && support4[ i ][ j ] ){	//per ogni posizione del supporto se in quella posizione c'è una tessera del giocatore che sta giocando (che ha appena inserito la tessera) e se la posizione deve essere ancora controllata, vedo se nelle 8 posizioni vicine c'è un altra tessera dello stesso colore (giocatore) stando attenti a non controllare posizioni inesistenti, se ci sono le condizioni giuste, c'è un vincitore sennò no
-							if ( i >= 3 && connect4[ i - 1 ][ j ] == player && areThere4InARow( i, j, -1, 0 ) )					return true;
-							if ( i >= 3 && j >= 3 && connect4[ i - 1 ][ j -1 ] == player && areThere4InARow( i, j, -1, -1 ) )	return true;
-							if ( j >= 3 && connect4[ i ][ j -1 ] == player && areThere4InARow( i, j, 0, -1 ) )					return true;
-							if ( i <= 3 && j >= 3 && connect4[ i + 1 ][ j - 1 ] == player && areThere4InARow( i, j, 1, -1 ) )	return true;
-							if ( i <= 3 && connect4[ i + 1 ][ j ] == player && areThere4InARow( i, j, 1, 0 ) )					return true;
-							if ( i <= 3 && j <= 3 && connect4[ i + 1 ][ j + 1 ] == player && areThere4InARow( i, j, 1, 1 ) )	return true;
-							if ( j <= 3 && connect4[ i ][ j + 1 ] == player && areThere4InARow( i, j, 0, 1 ) )					return true;
-							if ( i >= 3 && j <= 3 && connect4[ i - 1 ][ j + 1 ] == player && areThere4InARow( i, j, -1, 1 ) )	return true;
+				for (var i = 0; i < 6; i++) {
+					for (var j = 0; j < 7; j++) {
+						if ( connect4[ i ][ j ] == player ){	//per ogni posizione del supporto se in quella posizione c'è una tessera del giocatore che sta giocando (che ha appena inserito la tessera) e se la posizione deve essere ancora controllata, vedo se nelle 8 posizioni vicine c'è un altra tessera dello stesso colore (giocatore) stando attenti a non controllare posizioni inesistenti, se ci sono le condizioni giuste, c'è un vincitore sennò no
+							if ( i >= 3           && areThere4InARow( i, j, -1,  0 ) )		return true;
+							if ( i >= 3 && j >= 3 && areThere4InARow( i, j, -1, -1 ) )		return true;
+							if (           j >= 3 && areThere4InARow( i, j,  0, -1 ) )		return true;
+							if ( i <  3 && j >= 3 && areThere4InARow( i, j,  1, -1 ) )		return true;
+							if ( i <  3           && areThere4InARow( i, j,  1,  0 ) )		return true;
+							if ( i <  3 && j <  3 && areThere4InARow( i, j,  1,  1 ) )		return true;
+							if (           j <  3 && areThere4InARow( i, j,  0,  1 ) )		return true;
+							if ( i >= 3 && j <  3 && areThere4InARow( i, j, -1,  1 ) )		return true;
 						}
 					}
 				}
@@ -1222,13 +1312,9 @@
 			}
 
 			function areThere4InARow( i, j, hDir, vDir ){	//controlla che nella direzione indicata dalla chiamata in isTheWinner ci siano altre sue tessere in linea
-				if ( connect4[ i + ( hDir * 2 ) ][ j + ( vDir * 2 ) ] == player && connect4[ i + ( hDir * 3 ) ][ j + ( vDir * 3 ) ] == player ) {
+				if ( connect4[ i + hDir ][ j + vDir ] == player && connect4[ i + ( hDir * 2 ) ][ j + ( vDir * 2 ) ] == player && connect4[ i + ( hDir * 3 ) ][ j + ( vDir * 3 ) ] == player ) {
 					return true;	//se ci sono torno true
-				} else {			//se non ci sono metto false nel supporto nelle posizioni già controllate e torno false
-					support4[ i ][ j ] = false;
-					support4[ i + ( hDir ) ][ j + ( vDir ) ] = false;
-					support4[ i + ( hDir * 2 ) ][ j + ( vDir * 2 ) ] = false;
-					support4[ i + ( hDir * 3 ) ][ j + ( vDir * 3 ) ] = false;
+				} else {			//se non ci sono torno false
 					return false;
 				}
 			}
@@ -1241,8 +1327,8 @@
 
 			//event listener per lo spostamento del token tra le colonne e per il rilascio, implementa il cambio di turno (cambia player e visuale) automatico
 			function onDocumentKeyDown( event ){
-                // capisco che tasto è stato premuto
-                var keyCode = event.which;
+				// capisco che tasto è stato premuto
+				var keyCode = event.which;
 				// se freccia sinistra sposto la tessera di una colonna a sinistra
 				if( keyCode == 37 ){
 					if ( player == -1 && tokenPos < 40.5 ) {
@@ -1265,52 +1351,123 @@
 					}
 				//se invio o freccia giù
 				} else if( keyCode == 13 || keyCode == 40 ){
-					resetSupport();	//resetto la matrice di supporto per rifare il controllo
-					var col = ( tokenPos/13.5 ) + 3;	//capisco la colonna che il giocatore vuole selezionare
-					var ffp = firstFreePos( col );		//capisco la prima posizione libera nella colonna
-					var position = { x: col, y: 70, z: 0 };
-					var target = { x: col, y: 10 * ( ffp + 1 ), z: 0 };
-					tween = new TWEEN.Tween(position).to(target, 1200);
-					tween.delay( 100 );
-					tween.easing( TWEEN.Easing.Bounce.Out );
-					if ( player == -1 ) {
-						tween.onUpdate(function(){
-    						tokens.children[ 21 - token ].position.y = position.y;
-						});
-						token++;	//al prossimo turno si prende una nuova tessera
-					} else {
-						tween.onUpdate(function(){
-    						tokens.children[ 41 - token ].position.y = position.y;
-						});
-					}
-					tween.start();
-					tween.onComplete(
-						function(){
-							connect4[ ffp ][ col ] = player; //moifico la matrice coerentemente con la situazione
-							if ( isTheWinner() ) {	//se c'è un vincitore aggiungo il messaggio di vittoria e disabilito i comandi
-								if ( player == -1 ) {
-									winningTextGeo = new THREE.TextGeometry( 'The winner is...the YELLOW player!', { font: font, size: 10, height: 1 } );
-									winningText = new THREE.Mesh( winningTextGeo, tokenYellowMat );
-									winningText.position.set( 103, 50, -75 );
-									winningText.rotation.y = Math.PI;
-									scene.add( winningText );
-									makeParticles( player );
-								} else {
-									winningTextGeo = new THREE.TextGeometry( 'The winner is...the RED player!', { font: font, size: 10, height: 1 } );
-									winningTextMat = new THREE.MeshBasicMaterial( { color: 0xff0000 } );
-									winningText = new THREE.Mesh( winningTextGeo, tokenRedMat );
-									winningText.position.set( -93, 50, 75 );
-									scene.add( winningText );
-									makeParticles( player );
-								}
-							document.removeEventListener("keydown", onDocumentKeyDown, false);
-						} else {	//sennò cambio turno
-							changeCamera( player * ( -1 ) );
-						}
-					});
+					performMove();
 				}
-            }
-			
+			}
+
+function performMove() {
+	resetSupport();	//resetto la matrice di supporto per rifare il controllo
+	var col = ( tokenPos/13.5 ) + 3;	//capisco la colonna che il giocatore vuole selezionare
+	var ffp = ++firstFreePos[col];		//capisco la prima posizione libera nella colonna
+	var position = { x: col, y: 70, z: 0 };
+	var target = { x: col, y: 10 * ( ffp ), z: 0 };
+	tween = new TWEEN.Tween(position).to(target, 1200);
+	tween.delay( 100 );
+	tween.easing( TWEEN.Easing.Bounce.Out );
+	if ( player == -1 ) {
+		tween.onUpdate(function(){
+			tokens.children[ 21 - token ].position.y = position.y;
+		});
+		token++;	//al prossimo turno si prende una nuova tessera
+	} else {
+		tween.onUpdate(function(){
+			tokens.children[ 41 - token ].position.y = position.y;
+		});
+	}
+	tween.start();
+	tween.onComplete(
+		function(){
+			connect4[ ffp-1 ][ col ] = player; //moifico la matrice coerentemente con la situazione
+			if ( isTheWinner() ) {	//se c'è un vincitore aggiungo il messaggio di vittoria e disabilito i comandi
+				if ( player == -1 ) {
+					winningTextGeo = new THREE.TextGeometry( 'The winner is...the YELLOW player!', { font: font, size: 10, height: 1 } );
+					winningText = new THREE.Mesh( winningTextGeo, tokenYellowMat );
+					winningText.position.set( 103, 50, -75 );
+					winningText.rotation.y = Math.PI;
+					scene.add( winningText );
+					makeParticles( player );
+				} else {
+					winningTextGeo = new THREE.TextGeometry( 'The winner is...the RED player!', { font: font, size: 10, height: 1 } );
+					winningText = new THREE.Mesh( winningTextGeo, tokenRedMat );
+					winningText.position.set( -93, 50, 75 );
+					scene.add( winningText );
+					makeParticles( player );
+				}
+				document.removeEventListener("keydown", onDocumentKeyDown, false);
+			} else if ( token >= 21 ) {
+				draftTextGeo = new THREE.TextGeometry( 'Draft', { font: font, size: 10, height: 1 } );
+				draftText1 = new THREE.Mesh( draftTextGeo, connect4Material );
+				draftText1.position.set( 15, 50, -75 );
+				draftText1.rotation.y = Math.PI;
+				draftText2 = new THREE.Mesh( draftTextGeo, connect4Material );
+				draftText2.position.set( -15, 50, 75 );
+				scene.add( draftText1 );
+				scene.add( draftText2 );
+			} else {	//sennò cambio turno
+				changeCamera( player * ( -1 ) );
+			}
+		}
+	);
+}
+
+function performAIMove(col) {
+	//alert(col);
+	resetSupport();	//resetto la matrice di supporto per rifare il controlloS
+	var ffp = ++firstFreePos[col];		//capisco la prima posizione libera nella colonna
+	//alert(ffp);
+	//alert(firstFreePos);
+	var position = { x: col, y: 70, z: 0 };
+	var target = { x: col, y: 10 * ( ffp ), z: 0 };
+	tween = new TWEEN.Tween(position).to(target, 1200);
+	tween.delay( 100 );
+	tween.easing( TWEEN.Easing.Bounce.Out );
+	if ( player == -1 ) {
+		tween.onUpdate(function(){
+			tokens.children[ 21 - token ].position.y = position.y;
+		});
+		token++;	//al prossimo turno si prende una nuova tessera
+	} else {
+		tween.onUpdate(function(){
+			tokens.children[ 41 - token ].position.y = position.y;
+		});
+	}
+	tween.start();
+	tween.onComplete(
+		function(){
+			connect4[ ffp-1 ][ col ] = player; //modifico la matrice coerentemente con la situazione
+			if ( isTheWinner() ) {	//se c'è un vincitore aggiungo il messaggio di vittoria e disabilito i comandi
+				if ( player == -1 ) {
+					winningTextGeo = new THREE.TextGeometry( 'The winner is...the YELLOW player!', { font: font, size: 10, height: 1 } );
+					winningText = new THREE.Mesh( winningTextGeo, tokenYellowMat );
+					winningText.position.set( 103, 50, -75 );
+					winningText.rotation.y = Math.PI;
+					scene.add( winningText );
+					makeParticles( player );
+				} else {
+					winningTextGeo = new THREE.TextGeometry( 'The winner is...the RED player!', { font: font, size: 10, height: 1 } );
+					winningTextMat = new THREE.MeshBasicMaterial( { color: 0xff0000 } );
+					winningText = new THREE.Mesh( winningTextGeo, tokenRedMat );
+					winningText.position.set( -93, 50, 75 );
+					scene.add( winningText );
+					makeParticles( player );
+				}
+				document.removeEventListener("keydown", onDocumentKeyDown, false);
+			} else if ( token >= 21 ) {
+				draftTextGeo = new THREE.TextGeometry( 'Draft', { font: font, size: 10, height: 1 } );
+				draftText1 = new THREE.Mesh( draftTextGeo, connect4Material );
+				draftText1.position.set( 15, 50, -75 );
+				draftText1.rotation.y = Math.PI;
+				draftText2 = new THREE.Mesh( draftTextGeo, connect4Material );
+				draftText2.position.set( -15, 50, 75 );
+				scene.add( draftText1 );
+				scene.add( draftText2 );
+			} else {	//sennò cambio turno
+				changeCamera( player * ( -1 ) );
+			}
+		}
+	);
+}
+
 			//Creo il sistema particellare per la sorpresa finale
 			function makeParticles( winner ){
 				for (var p = 0; p < pNum; p++) {
